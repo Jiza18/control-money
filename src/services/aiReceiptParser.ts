@@ -97,7 +97,9 @@ Responde SOLO con el JSON, sin markdown ni explicación.`,
   }
 
   const data = await response.json();
-  const text: string = data?.content?.[0]?.text ?? '{}';
+  const raw: string = data?.content?.[0]?.text ?? '{}';
+  // Strip markdown code fences the model sometimes wraps around the JSON
+  const text = raw.replace(/^```(?:json)?\s*/m, '').replace(/```\s*$/m, '').trim();
 
   let parsed: Partial<ParsedReceipt>;
   try {
