@@ -7,9 +7,9 @@ import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import SettingsIcon from '@mui/icons-material/Settings';
 import { createRepositoryFromEnv, getRepositoryFactory } from '../db/repositories/repositoryFactory';
 import { getSyncService } from '../db/syncService';
-import { switchRepository, setPreferredDatabaseType } from '../db/repositoryAdapter';
+import { setPreferredDatabaseType } from '../db/repositoryAdapter';
 import { DatabaseType, SyncResult } from '../db/repositories/interfaces';
-import { ENV_CONFIG, validateTursoConfig, logConfig } from '../config/env';
+import { ENV_CONFIG, logConfig } from '../config/env';
 import { getCloudDbConfig, saveCloudDbConfig, isCloudDbConfigValid } from '../db/cloudDbConfig';
 
 interface DatabaseConfigProps {

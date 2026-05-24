@@ -32,7 +32,8 @@ export default function GoogleSheetsSync() {
 
   const loadLastSyncInfo = async () => {
     try {
-      const config = await getGoogleSheetsConfig();
+      const raw = await getGoogleSheetsConfig();
+      const config = Array.isArray(raw) ? raw[0] : raw;
       if (config?.lastSync) {
         setLastSync(new Date(config.lastSync));
       }

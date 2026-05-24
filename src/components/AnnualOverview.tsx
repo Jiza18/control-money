@@ -18,7 +18,18 @@ import {
   CardContent,
   Grid,
 } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  Legend,
+  ResponsiveContainer,
+} from 'recharts';
 import { format, startOfYear, eachMonthOfInterval, endOfYear, isSameMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Expense } from '../db/config';
@@ -46,6 +57,7 @@ export default function AnnualOverview() {
     end: endOfYear(currentYear)
   });
 
+  const muiTheme = useTheme();
   const isMobile = useMediaQuery('(max-width:900px)');
 
   // Definir loadExpenses antes de los useEffect para evitar ReferenceError en arrays de dependencias
@@ -154,6 +166,21 @@ export default function AnnualOverview() {
     }, 0);
   };
 
+  const chartData = months.map((month) => {
+    const key = format(month, 'yyyy-MM');
+    const data = monthlyExpenses[key];
+    return {
+      name: format(month, 'MMM', { locale: es }),
+      total: selectedMonths.includes(key) ? (data?.total || 0) : 0,
+      pagado: selectedMonths.includes(key) ? (data?.totalPaid || 0) : 0,
+    };
+  });
+
+  const hasChartData = chartData.some((d) => d.total > 0);
+  const isDark = muiTheme.palette.mode === 'dark';
+  const gridColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
+  const textColor = isDark ? '#9ca3af' : '#6b7280';
+
   return (
     <Box sx={{ mt: 4 }}>
       <Box sx={{ mb: 3 }}>
@@ -176,6 +203,55 @@ export default function AnnualOverview() {
           })}
         </Box>
       </Box>
+
+      {/* Bar chart */}
+      {hasChartData && (
+        <Box sx={{ mb: 3, height: 240 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+              <XAxis
+                dataKey="name"
+                tick={{ fontSize: 11, fill: textColor }}
+                axisLine={{ stroke: gridColor }}
+                tickLine={false}
+              />
+              <YAxis
+                tick={{ fontSize: 11, fill: textColor }}
+                axisLine={{ stroke: gridColor }}
+                tickLine={false}
+                tickFormatter={(v: number) =>
+                  new Intl.NumberFormat('es-ES', {
+                    notation: 'compact',
+                    style: 'currency',
+                    currency: 'EUR',
+                    maximumFractionDigits: 0,
+                  }).format(v)
+                }
+              />
+              <RechartsTooltip
+                formatter={(value, name) => [
+                  formatCurrency(Number(value)),
+                  name === 'total' ? 'Total' : 'Pagado',
+                ]}
+                contentStyle={{
+                  backgroundColor: isDark ? '#1e293b' : '#fff',
+                  border: `1px solid ${isDark ? '#334155' : '#e2e8f0'}`,
+                  borderRadius: 8,
+                  color: isDark ? '#f1f5f9' : '#1e293b',
+                }}
+              />
+              <Legend
+                formatter={(value: string) => (value === 'total' ? 'Total' : 'Pagado')}
+                wrapperStyle={{ fontSize: 12, color: textColor }}
+              />
+              <Bar dataKey="total" fill={muiTheme.palette.primary.main} radius={[4, 4, 0, 0]} />
+              <Bar dataKey="pagado" fill="#10b981" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </Box>
+      )}
+
       {isMobile ? (
         <Box>
           {categories.map((category) => {

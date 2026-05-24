@@ -1,17 +1,30 @@
 import { useState, useEffect } from 'react';
 import {
   Box,
-  Paper,
   TextField,
   Button,
   Typography,
   Alert,
   CircularProgress,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  Divider,
 } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import StorageIcon from '@mui/icons-material/Storage';
+import CloudSyncIcon from '@mui/icons-material/CloudSync';
+import TableViewIcon from '@mui/icons-material/TableView';
+import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
+import NotificationsIcon from '@mui/icons-material/Notifications';
 import { validateGoogleSheetsConfig } from '../db/googleSheetsService';
 import { getGoogleSheetsConfig, saveGoogleSheetsConfig } from '../db';
 import DatabaseBackup from './DatabaseBackup';
 import GoogleSheetsSync from './GoogleSheetsSync';
+import BudgetConfig from './BudgetConfig';
+import NotificationSettings from './NotificationSettings';
+import { tokens } from '../theme';
 
 interface GoogleSheetsConfig {
   clientId: string;
@@ -25,6 +38,9 @@ interface GoogleSheetsConfig {
 }
 
 export default function GoogleSheetsConfig() {
+  const muiTheme = useTheme();
+  const t = tokens[muiTheme.palette.mode];
+
   const [config, setConfig] = useState<GoogleSheetsConfig>({
     clientId: import.meta.env.VITE_GOOGLE_CLIENT_ID || '',
     clientSecret: import.meta.env.VITE_GOOGLE_CLIENT_SECRET || '',
@@ -33,18 +49,18 @@ export default function GoogleSheetsConfig() {
     tokenExpiry: new Date(),
     spreadsheetId: import.meta.env.VITE_GOOGLE_SHEET_ID || '',
     sheetName: import.meta.env.VITE_GOOGLE_SHEET_NAME || '',
-    lastSync: null
+    lastSync: null,
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  // Al usar el adaptador de repositorio, asumimos que la capa de datos está disponible
+  const [authWindow, setAuthWindow] = useState<Window | null>(null);
 
   useEffect(() => {
     loadConfig();
     const handler = () => loadConfig();
-    window.addEventListener('dbTypeChanged', handler as any);
-    return () => window.removeEventListener('dbTypeChanged', handler as any);
+    window.addEventListener('dbTypeChanged', handler as EventListener);
+    return () => window.removeEventListener('dbTypeChanged', handler as EventListener);
   }, []);
 
   const loadConfig = async () => {
@@ -60,23 +76,21 @@ export default function GoogleSheetsConfig() {
     }
   };
 
-  // La creación explícita del almacén ya no es necesaria al usar el patrón Repository
-
   const saveConfig = async () => {
     setIsLoading(true);
     setError(null);
     setSuccess(null);
 
     try {
-      // Validar que todos los campos requeridos estén presentes
       if (!config.spreadsheetId || !config.sheetName) {
         throw new Error('El ID de la hoja y el nombre son requeridos');
       }
 
-      // Validar la configuración con Google Sheets API
       const isValid = await validateGoogleSheetsConfig(config);
       if (!isValid) {
-        throw new Error('La configuración proporcionada no es válida. Por favor, verifica tus credenciales y los datos de la hoja de cálculo.');
+        throw new Error(
+          'La configuración proporcionada no es válida. Por favor, verifica tus credenciales y los datos de la hoja de cálculo.'
+        );
       }
 
       await saveGoogleSheetsConfig({
@@ -86,15 +100,13 @@ export default function GoogleSheetsConfig() {
       setSuccess('Configuración guardada correctamente');
     } catch (error) {
       console.error('Error saving Google Sheets config:', error);
-      setError(error instanceof Error ? error.message : 'Error al guardar la configuración');
+      setError(
+        error instanceof Error ? error.message : 'Error al guardar la configuración'
+      );
     } finally {
       setIsLoading(false);
     }
   };
-
-  // La función handleSync se ha movido al componente GoogleSheetsSync
-
-  const [authWindow, setAuthWindow] = useState<Window | null>(null);
 
   useEffect(() => {
     const handleMessage = async (event: MessageEvent) => {
@@ -106,9 +118,7 @@ export default function GoogleSheetsConfig() {
             setIsLoading(true);
             const response = await fetch('https://oauth2.googleapis.com/token', {
               method: 'POST',
-              headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-              },
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
               body: new URLSearchParams({
                 code,
                 client_id: config.clientId,
@@ -118,9 +128,7 @@ export default function GoogleSheetsConfig() {
               }),
             });
 
-            if (!response.ok) {
-              throw new Error('Error al obtener los tokens');
-            }
+            if (!response.ok) throw new Error('Error al obtener los tokens');
 
             const data = await response.json();
             const newConfig = {
@@ -161,91 +169,197 @@ export default function GoogleSheetsConfig() {
     }
   };
 
-
+  const sectionHeaderSx = {
+    '& .MuiAccordionSummary-content': {
+      alignItems: 'center',
+      gap: 1.5,
+    },
+  };
 
   return (
-    <Box className="flex flex-col gap-8">
-      <Paper className="p-8">
-        <Typography variant="h6" className="font-semibold mb-4">
-          Configuración de Google Sheets
-        </Typography>
-        <hr className="mt-2 mb-6" />
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>
+        Configuración
+      </Typography>
 
-        {
-          <Box className="flex flex-col gap-8">
-            <Box className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {/* Presupuesto por categoría */}
+      <Accordion
+        disableGutters
+        elevation={0}
+        sx={{
+          border: `1px solid ${t.border}`,
+          borderRadius: '16px !important',
+          '&:before': { display: 'none' },
+          overflow: 'hidden',
+        }}
+      >
+        <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={sectionHeaderSx}>
+          <AccountBalanceWalletIcon sx={{ color: t.warning, fontSize: '1.25rem' }} />
+          <Typography variant="body1" sx={{ fontWeight: 600 }}>
+            Presupuesto por categoría
+          </Typography>
+        </AccordionSummary>
+        <Divider />
+        <AccordionDetails sx={{ p: 2 }}>
+          <BudgetConfig />
+        </AccordionDetails>
+      </Accordion>
+
+      {/* Recordatorios */}
+      <Accordion
+        disableGutters
+        elevation={0}
+        sx={{
+          border: `1px solid ${t.border}`,
+          borderRadius: '16px !important',
+          '&:before': { display: 'none' },
+          overflow: 'hidden',
+        }}
+      >
+        <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={sectionHeaderSx}>
+          <NotificationsIcon sx={{ color: t.info, fontSize: '1.25rem' }} />
+          <Typography variant="body1" sx={{ fontWeight: 600 }}>
+            Recordatorios de pagos
+          </Typography>
+        </AccordionSummary>
+        <Divider />
+        <AccordionDetails sx={{ p: 2 }}>
+          <NotificationSettings />
+        </AccordionDetails>
+      </Accordion>
+
+      {/* Base de datos */}
+      <Accordion
+        defaultExpanded
+        disableGutters
+        elevation={0}
+        sx={{
+          border: `1px solid ${t.border}`,
+          borderRadius: '16px !important',
+          '&:before': { display: 'none' },
+          overflow: 'hidden',
+        }}
+      >
+        <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={sectionHeaderSx}>
+          <StorageIcon sx={{ color: t.primary, fontSize: '1.25rem' }} />
+          <Typography variant="body1" sx={{ fontWeight: 600 }}>
+            Base de datos y Backup
+          </Typography>
+        </AccordionSummary>
+        <Divider />
+        <AccordionDetails sx={{ p: 2 }}>
+          <DatabaseBackup />
+        </AccordionDetails>
+      </Accordion>
+
+      {/* Google Sheets sync */}
+      <Accordion
+        disableGutters
+        elevation={0}
+        sx={{
+          border: `1px solid ${t.border}`,
+          borderRadius: '16px !important',
+          '&:before': { display: 'none' },
+          overflow: 'hidden',
+        }}
+      >
+        <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={sectionHeaderSx}>
+          <CloudSyncIcon sx={{ color: t.info, fontSize: '1.25rem' }} />
+          <Typography variant="body1" sx={{ fontWeight: 600 }}>
+            Sincronización
+          </Typography>
+        </AccordionSummary>
+        <Divider />
+        <AccordionDetails sx={{ p: 2 }}>
+          <GoogleSheetsSync />
+        </AccordionDetails>
+      </Accordion>
+
+      {/* Google Sheets credentials */}
+      <Accordion
+        disableGutters
+        elevation={0}
+        sx={{
+          border: `1px solid ${t.border}`,
+          borderRadius: '16px !important',
+          '&:before': { display: 'none' },
+          overflow: 'hidden',
+        }}
+      >
+        <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={sectionHeaderSx}>
+          <TableViewIcon sx={{ color: t.success, fontSize: '1.25rem' }} />
+          <Typography variant="body1" sx={{ fontWeight: 600 }}>
+            Google Sheets
+          </Typography>
+        </AccordionSummary>
+        <Divider />
+        <AccordionDetails sx={{ p: 2 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            {error && <Alert severity="error">{error}</Alert>}
+            {success && <Alert severity="success">{success}</Alert>}
+
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+                gap: 2,
+              }}
+            >
               <TextField
                 label="ID de cliente"
                 value={config.clientId}
-                onChange={(e) =>
-                  setConfig({ ...config, clientId: e.target.value })
-                }
+                onChange={(e) => setConfig({ ...config, clientId: e.target.value })}
                 fullWidth
               />
               <TextField
                 label="Secreto de cliente"
                 value={config.clientSecret}
-                onChange={(e) =>
-                  setConfig({ ...config, clientSecret: e.target.value })
-                }
+                onChange={(e) => setConfig({ ...config, clientSecret: e.target.value })}
                 fullWidth
               />
-            </Box>
-
-            <Box className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <TextField
                 label="ID de la hoja de cálculo"
                 value={config.spreadsheetId}
-                onChange={(e) =>
-                  setConfig({ ...config, spreadsheetId: e.target.value })
-                }
+                onChange={(e) => setConfig({ ...config, spreadsheetId: e.target.value })}
                 fullWidth
               />
               <TextField
                 label="Nombre de la hoja"
                 value={config.sheetName}
-                onChange={(e) =>
-                  setConfig({ ...config, sheetName: e.target.value })
-                }
+                onChange={(e) => setConfig({ ...config, sheetName: e.target.value })}
                 fullWidth
               />
             </Box>
 
-            <Box className="flex flex-col gap-6">
-              {error && <Alert severity="error" className="mb-4">{error}</Alert>}
-              {success && <Alert severity="success" className="mb-4">{success}</Alert>}
-
-              <Box className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Button
-                  variant="contained"
-                  onClick={handleAuthClick}
-                  disabled={isLoading}
-                  className="w-full"
-                >
-                  {isLoading ? (
-                    <CircularProgress size={24} className="mr-2" />
-                  ) : null}
-                  Autenticar con Google
-                </Button>
-                <Button
-                  variant="contained"
-                  onClick={saveConfig}
-                  disabled={isLoading}
-                  className="w-full"
-                >
-                  {isLoading ? (
-                    <CircularProgress size={24} className="mr-2" />
-                  ) : null}
-                  Guardar configuración
-                </Button>
-              </Box>
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+                gap: 2,
+              }}
+            >
+              <Button
+                variant="contained"
+                onClick={handleAuthClick}
+                disabled={isLoading}
+                startIcon={isLoading ? <CircularProgress size={18} /> : undefined}
+                sx={{ borderRadius: '12px' }}
+              >
+                Autenticar con Google
+              </Button>
+              <Button
+                variant="outlined"
+                onClick={saveConfig}
+                disabled={isLoading}
+                startIcon={isLoading ? <CircularProgress size={18} /> : undefined}
+                sx={{ borderRadius: '12px' }}
+              >
+                Guardar configuración
+              </Button>
             </Box>
           </Box>
-        }
-      </Paper>
-
-      <GoogleSheetsSync />
-      <DatabaseBackup />
+        </AccordionDetails>
+      </Accordion>
     </Box>
   );
 }

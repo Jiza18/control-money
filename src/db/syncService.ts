@@ -57,7 +57,7 @@ export class DatabaseSyncServiceImpl implements DatabaseSyncService {
   async syncWithDirection(
     source: DatabaseRepository,
     target: DatabaseRepository,
-    direction: SyncStrategy
+    _direction: SyncStrategy
   ): Promise<SyncResult> {
     const result: SyncResult = {
       success: false,

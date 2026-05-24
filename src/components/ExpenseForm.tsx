@@ -11,13 +11,18 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  useMediaQuery,
+  Typography,
 } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { es } from 'date-fns/locale';
 import { Expense } from '../db/config';
 import { addExpense, updateExpense } from '../db';
+import { FormSection } from './ui';
+import { tokens } from '../theme';
 
 const categories = [
   'Préstamos',
@@ -26,7 +31,7 @@ const categories = [
   'Transporte',
   'Entretenimiento',
   'Salud',
-  'Otros'
+  'Otros',
 ];
 
 const frequencies = [
@@ -34,7 +39,7 @@ const frequencies = [
   { value: 'monthly', label: 'Mensual' },
   { value: 'bi-monthly', label: 'Cada 2 meses' },
   { value: 'quarterly', label: 'Cada 3 meses' },
-  { value: 'annual', label: 'Anual' }
+  { value: 'annual', label: 'Anual' },
 ];
 
 interface ExpenseFormProps {
@@ -45,7 +50,17 @@ interface ExpenseFormProps {
   selectedMonth: Date;
 }
 
-export default function ExpenseForm({ open, onClose, onExpenseAdded, expense: expenseProp, selectedMonth }: ExpenseFormProps) {
+export default function ExpenseForm({
+  open,
+  onClose,
+  onExpenseAdded,
+  expense: expenseProp,
+  selectedMonth,
+}: ExpenseFormProps) {
+  const muiTheme = useTheme();
+  const t = tokens[muiTheme.palette.mode];
+  const isMobile = useMediaQuery(muiTheme.breakpoints.down('sm'));
+
   const [expense, setExpense] = useState<Omit<Expense, 'id'>>(() => ({
     amount: 0,
     category: '',
@@ -53,17 +68,20 @@ export default function ExpenseForm({ open, onClose, onExpenseAdded, expense: ex
     date: selectedMonth,
     frequency: 'one-time',
     isPaid: false,
-    paymentHistory: []
+    paymentHistory: [],
   }));
 
   useEffect(() => {
     if (expenseProp) {
       const { id, ...expenseData } = expenseProp;
+      void id;
       setExpense({
         ...expenseData,
         date: new Date(expenseData.date),
-        nextPaymentDate: expenseData.nextPaymentDate ? new Date(expenseData.nextPaymentDate) : undefined,
-        paymentHistory: expenseData.paymentHistory || []
+        nextPaymentDate: expenseData.nextPaymentDate
+          ? new Date(expenseData.nextPaymentDate)
+          : undefined,
+        paymentHistory: expenseData.paymentHistory || [],
       });
     } else {
       setExpense({
@@ -73,47 +91,43 @@ export default function ExpenseForm({ open, onClose, onExpenseAdded, expense: ex
         date: selectedMonth,
         frequency: 'one-time',
         isPaid: false,
-        paymentHistory: []
+        paymentHistory: [],
       });
     }
   }, [expenseProp, selectedMonth]);
 
-
   const handleAmountChange = async (newAmount: number) => {
-    // Actualizar el estado local primero
-    setExpense(prev => ({ ...prev, amount: newAmount }));
+    setExpense((prev) => ({ ...prev, amount: newAmount }));
 
-    // Si no es un gasto recurrente o no estamos editando, no actualizamos el historial
     if (!expenseProp?.id || expense.frequency !== 'monthly') return;
 
     try {
       const updatedPaymentHistory = [...(expense.paymentHistory || [])];
-      
-      const index = updatedPaymentHistory.findIndex(record => {
+
+      const index = updatedPaymentHistory.findIndex((record) => {
         const recordDate = new Date(record.date);
-        return recordDate.getMonth() === selectedMonth.getMonth() && 
-               recordDate.getFullYear() === selectedMonth.getFullYear();
+        return (
+          recordDate.getMonth() === selectedMonth.getMonth() &&
+          recordDate.getFullYear() === selectedMonth.getFullYear()
+        );
       });
 
       if (index >= 0) {
-        // Actualizar solo el monto del mes seleccionado
         updatedPaymentHistory[index] = {
           ...updatedPaymentHistory[index],
-          amount: newAmount
+          amount: newAmount,
         };
       } else {
-        // Agregar nuevo registro para el mes seleccionado
         updatedPaymentHistory.push({
           date: selectedMonth,
           isPaid: false,
-          amount: newAmount
+          amount: newAmount,
         });
       }
 
-      // Mantener el monto original en el objeto principal para futuros meses
       const updatedExpense = {
         ...expense,
-        paymentHistory: updatedPaymentHistory
+        paymentHistory: updatedPaymentHistory,
       };
       await updateExpense({ ...updatedExpense, id: expenseProp.id });
     } catch (error) {
@@ -126,17 +140,17 @@ export default function ExpenseForm({ open, onClose, onExpenseAdded, expense: ex
     try {
       const currentDate = selectedMonth;
       if (expenseProp?.id) {
-        // Si es un gasto recurrente, actualizar el registro de pago para el mes actual
         if (expense.frequency !== 'one-time') {
-          const paymentRecord = expense.paymentHistory?.find(record => {
+          const paymentRecord = expense.paymentHistory?.find((record) => {
             const recordDate = new Date(record.date);
-            return recordDate.getMonth() === currentDate.getMonth() && 
-                   recordDate.getFullYear() === currentDate.getFullYear();
+            return (
+              recordDate.getMonth() === currentDate.getMonth() &&
+              recordDate.getFullYear() === currentDate.getFullYear()
+            );
           });
 
           if (paymentRecord) {
-            // Actualizar solo el monto del mes actual
-            const updatedPaymentHistory = expense.paymentHistory?.map(record => {
+            const updatedPaymentHistory = expense.paymentHistory?.map((record) => {
               if (record === paymentRecord) {
                 return { ...record, amount: expense.amount };
               }
@@ -144,20 +158,18 @@ export default function ExpenseForm({ open, onClose, onExpenseAdded, expense: ex
             });
             expense.paymentHistory = updatedPaymentHistory;
           } else {
-            // Agregar nuevo registro para el mes actual
             expense.paymentHistory = [
               ...(expense.paymentHistory || []),
               {
                 date: currentDate,
                 isPaid: false,
-                amount: expense.amount
-              }
+                amount: expense.amount,
+              },
             ];
           }
         }
         await updateExpense({ ...expense, id: expenseProp.id });
       } else {
-        // Para nuevos gastos recurrentes, inicializar el historial de pagos para los próximos 12 meses
         if (expense.frequency !== 'one-time') {
           const nextTwelveMonths = Array.from({ length: 12 }, (_, i) => {
             const date = new Date(currentDate);
@@ -165,14 +177,14 @@ export default function ExpenseForm({ open, onClose, onExpenseAdded, expense: ex
             return {
               date,
               isPaid: false,
-              amount: expense.amount // Cada mes se inicializa con el monto original
+              amount: expense.amount,
             };
           });
           expense.paymentHistory = nextTwelveMonths;
         }
         await addExpense(expense);
       }
-      // Limpiar el formulario después de guardar
+
       setExpense({
         amount: 0,
         category: '',
@@ -180,7 +192,7 @@ export default function ExpenseForm({ open, onClose, onExpenseAdded, expense: ex
         date: selectedMonth,
         frequency: 'one-time',
         isPaid: false,
-        paymentHistory: []
+        paymentHistory: [],
       });
       onExpenseAdded();
       onClose();
@@ -189,25 +201,46 @@ export default function ExpenseForm({ open, onClose, onExpenseAdded, expense: ex
     }
   };
 
-  return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>{expenseProp ? 'Editar Gasto' : 'Añadir Gasto'}</DialogTitle>
-      <form onSubmit={handleSubmit}>
-        <DialogContent>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <TextField
-              label="Cantidad"
-              type="number"
-              value={expense.amount}
-              onChange={(e) => {
-                const newAmount = Number(e.target.value);
-                setExpense({ ...expense, amount: newAmount });
-                handleAmountChange(newAmount);
-              }}
-              required
-              fullWidth
-            />
+  const isEditing = !!expenseProp;
 
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="sm"
+      fullWidth
+      fullScreen={isMobile}
+      PaperProps={{
+        sx: isMobile
+          ? { borderRadius: 0, margin: 0, maxHeight: '100%' }
+          : undefined,
+      }}
+    >
+      <DialogTitle sx={{ fontWeight: 700, pb: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Typography variant="h6" sx={{ fontWeight: 700 }}>
+            {isEditing ? 'Editar Gasto' : 'Añadir Gasto'}
+          </Typography>
+          <Typography
+            variant="caption"
+            sx={{
+              px: 1,
+              py: 0.25,
+              borderRadius: 1,
+              backgroundColor: isEditing ? t.warningSoft : t.successSoft,
+              color: isEditing ? t.warning : t.success,
+              fontWeight: 600,
+            }}
+          >
+            {isEditing ? 'Editando' : 'Nuevo'}
+          </Typography>
+        </Box>
+      </DialogTitle>
+
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 3, pt: 1 }}>
+          {/* Sección: Información básica */}
+          <FormSection title="Información básica">
             <FormControl fullWidth required>
               <InputLabel>Categoría</InputLabel>
               <Select
@@ -232,20 +265,39 @@ export default function ExpenseForm({ open, onClose, onExpenseAdded, expense: ex
               multiline
               rows={2}
             />
+          </FormSection>
+
+          {/* Sección: Monto y fecha */}
+          <FormSection title="Monto y fecha">
+            <TextField
+              label="Cantidad"
+              type="number"
+              value={expense.amount}
+              onChange={(e) => {
+                const newAmount = Number(e.target.value);
+                setExpense({ ...expense, amount: newAmount });
+                handleAmountChange(newAmount);
+              }}
+              required
+              fullWidth
+            />
 
             <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={es}>
               <DatePicker
-                label={expense.frequency === 'one-time' ? "Fecha del gasto" : "Fecha de inicio"}
+                label={
+                  expense.frequency === 'one-time' ? 'Fecha del gasto' : 'Fecha de inicio'
+                }
                 value={expense.date}
                 onChange={(newDate) => newDate && setExpense({ ...expense, date: newDate })}
                 slotProps={{
                   textField: {
                     required: true,
                     fullWidth: true,
-                    helperText: expense.frequency === 'one-time' 
-                      ? "Selecciona la fecha en que se realizó el gasto"
-                      : "Selecciona la fecha de inicio para gastos recurrentes"
-                  }
+                    helperText:
+                      expense.frequency === 'one-time'
+                        ? 'Selecciona la fecha en que se realizó el gasto'
+                        : 'Selecciona la fecha de inicio para gastos recurrentes',
+                  },
                 }}
               />
             </LocalizationProvider>
@@ -255,10 +307,12 @@ export default function ExpenseForm({ open, onClose, onExpenseAdded, expense: ex
               <Select
                 value={expense.frequency}
                 label="Frecuencia"
-                onChange={(e) => setExpense({
-                  ...expense,
-                  frequency: e.target.value as Expense['frequency']
-                })}
+                onChange={(e) =>
+                  setExpense({
+                    ...expense,
+                    frequency: e.target.value as Expense['frequency'],
+                  })
+                }
               >
                 {frequencies.map((freq) => (
                   <MenuItem key={freq.value} value={freq.value}>
@@ -267,24 +321,49 @@ export default function ExpenseForm({ open, onClose, onExpenseAdded, expense: ex
                 ))}
               </Select>
             </FormControl>
+          </FormSection>
 
-            {(expense.category === 'Préstamos' && expense.frequency !== 'one-time') && (
+          {/* Sección: Opciones (sólo si aplica) */}
+          {expense.category === 'Préstamos' && expense.frequency !== 'one-time' && (
+            <FormSection title="Opciones">
               <TextField
                 label="Duración (meses)"
                 type="number"
                 value={expense.duration || ''}
-                onChange={(e) => setExpense({ ...expense, duration: Number(e.target.value) })}
+                onChange={(e) =>
+                  setExpense({ ...expense, duration: Number(e.target.value) })
+                }
                 fullWidth
                 required
                 inputProps={{ min: 1 }}
                 helperText="Número de meses durante los que se realizará el pago"
               />
-            )}
-          </Box>
+            </FormSection>
+          )}
         </DialogContent>
-        <DialogActions>
-          <Button onClick={onClose}>Cancelar</Button>
-          <Button type="submit" variant="contained" color="primary">
+
+        <DialogActions
+          sx={{
+            px: 3,
+            pb: isMobile ? 3 : 2,
+            gap: 1,
+            ...(isMobile && {
+              position: 'sticky',
+              bottom: 0,
+              backgroundColor: t.surface,
+              borderTop: `1px solid ${t.border}`,
+            }),
+          }}
+        >
+          <Button onClick={onClose} variant="outlined" sx={{ borderRadius: '12px' }}>
+            Cancelar
+          </Button>
+          <Button
+            type="submit"
+            variant="contained"
+            color="primary"
+            sx={{ borderRadius: '12px', flex: isMobile ? 1 : undefined }}
+          >
             Guardar
           </Button>
         </DialogActions>

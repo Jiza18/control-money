@@ -1,16 +1,12 @@
-import { Box } from '@mui/material';
+import { Box, Typography } from '@mui/material';
 import SavingsList from './SavingsList';
 
 export default function Savings() {
   return (
     <Box>
-      <div className="mb-8">
-        <div className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-semibold text-gray-800 dark:text-gray-100">Ahorros</h1>
-          </div>
-        </div>
-      </div>
+      <Typography variant="h5" sx={{ fontWeight: 700, mb: 3 }}>
+        Ahorros
+      </Typography>
       <SavingsList />
     </Box>
   );

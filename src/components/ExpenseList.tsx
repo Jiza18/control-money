@@ -11,25 +11,43 @@ import {
   TableRow,
   TableFooter,
   IconButton,
-  Chip,
   Stack,
   Checkbox,
-  Button,
-  TextField,
+  InputBase,
+  Chip,
   useMediaQuery,
   Card,
   CardContent,
-  CardActions,
   Divider,
-  Grid
+  Grid,
+  Skeleton,
+  LinearProgress,
 } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
-import { format, eachMonthOfInterval, isSameMonth } from 'date-fns';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import SearchIcon from '@mui/icons-material/Search';
+import ClearIcon from '@mui/icons-material/Clear';
+import TableChartIcon from '@mui/icons-material/TableChart';
+import { format, isSameMonth, addMonths, subMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Expense } from '../db/config';
-// Usar adaptador de repositorio para respetar la BD activa
 import { getExpensesByMonth, deleteExpense, getCurrentBalance, updateExpense } from '../db';
+import {
+  SummaryCard,
+  CategoryChip,
+  FrequencyChip,
+  StatusChip,
+  EmptyState,
+  ConfirmDialog,
+  SwipeableCard,
+} from './ui';
+import { tokens } from '../theme';
+import { getAllBudgets } from '../db/budgetServices';
+import { CategoryBudget } from '../db/config';
+import { useToast } from '../contexts/ToastContext';
 
 interface ExpenseListProps {
   currentMonth: Date;
@@ -38,27 +56,42 @@ interface ExpenseListProps {
   onMonthChange: (month: Date) => void;
 }
 
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('es-ES', {
-    style: 'currency',
-    currency: 'EUR'
-  }).format(amount);
-};
+const formatCurrency = (amount: number) =>
+  new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(amount);
 
-export default function ExpenseList({ currentMonth, onEditExpense, onExpenseDeleted, onMonthChange }: ExpenseListProps) {
+export default function ExpenseList({
+  currentMonth,
+  onEditExpense,
+  onExpenseDeleted,
+  onMonthChange,
+}: ExpenseListProps) {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [searchText, setSearchText] = useState('');
-  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' }>({ key: 'description', direction: 'asc' });
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' }>({
+    key: 'description',
+    direction: 'asc',
+  });
   const [balance, setBalance] = useState<{ amount: number; monthlyIncome: number } | null>(null);
-  const isMobile = useMediaQuery('(max-width:900px)');
-  const isTabletOrMobile = useMediaQuery('(max-width:1024px)');
+  const [confirmState, setConfirmState] = useState<{ open: boolean; id: number | null }>({
+    open: false,
+    id: null,
+  });
+  const [loading, setLoading] = useState(true);
+  const [budgets, setBudgets] = useState<CategoryBudget[]>([]);
 
-  const calculateBalances = (currentBalance: { amount: number; monthlyIncome: number } | null) => {
+  const toast = useToast();
+  const muiTheme = useTheme();
+  const t = tokens[muiTheme.palette.mode];
+  const isMobile = useMediaQuery('(max-width:900px)');
+
+  const calculateBalances = (
+    currentBalance: { amount: number; monthlyIncome: number } | null
+  ) => {
     if (!currentBalance) return { realBalance: 0, projectedBalance: 0 };
 
     const pendingExpenses = expenses.reduce((sum, expense) => {
-      const currentMonthPayment = expense.paymentHistory?.find(record => 
+      const currentMonthPayment = expense.paymentHistory?.find((record) =>
         isSameMonth(new Date(record.date), currentMonth)
       );
       return !currentMonthPayment?.isPaid ? sum + expense.amount : sum;
@@ -66,25 +99,27 @@ export default function ExpenseList({ currentMonth, onEditExpense, onExpenseDele
 
     const totalMonthExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
 
-    // Balance Real = Balance Actual - Gastos Pendientes del mes actual
-    const realBalance = currentBalance.amount - (isSameMonth(currentMonth, new Date()) ? pendingExpenses : 0);
-    
-    // Balance Proyectado = Ingresos Mensuales - Total Gastos del mes
-    const projectedBalance = isSameMonth(currentMonth, new Date()) ? realBalance : currentBalance.monthlyIncome - totalMonthExpenses;
+    const realBalance =
+      currentBalance.amount -
+      (isSameMonth(currentMonth, new Date()) ? pendingExpenses : 0);
+
+    const projectedBalance = isSameMonth(currentMonth, new Date())
+      ? realBalance
+      : currentBalance.monthlyIncome - totalMonthExpenses;
 
     return { realBalance, projectedBalance };
   };
 
-  const filtered = formatCurrency(
-    expenses
-      .filter(expense => {
-        const matchesCategory = selectedCategory === null || expense.category === selectedCategory;
-        const matchesSearch = searchText === '' || 
-          expense.description.toLowerCase().includes(searchText.toLowerCase());
-        return matchesCategory && matchesSearch;
-      })
-      .reduce((sum, expense) => sum + expense.amount, 0)
-  );
+  const filteredTotal = expenses
+    .filter((expense) => {
+      const matchesCategory =
+        selectedCategory === null || expense.category === selectedCategory;
+      const matchesSearch =
+        searchText === '' ||
+        expense.description.toLowerCase().includes(searchText.toLowerCase());
+      return matchesCategory && matchesSearch;
+    })
+    .reduce((sum, expense) => sum + expense.amount, 0);
 
   const loadBalance = useCallback(async () => {
     try {
@@ -96,87 +131,87 @@ export default function ExpenseList({ currentMonth, onEditExpense, onExpenseDele
   }, []);
 
   const loadExpenses = useCallback(async () => {
+    setLoading(true);
     try {
       const monthExpenses = await getExpensesByMonth(currentMonth);
       setExpenses(monthExpenses);
     } catch (error) {
       console.error('Error loading expenses:', error);
+    } finally {
+      setLoading(false);
     }
   }, [currentMonth]);
 
-  // Recargar datos cuando cambia el tipo de BD (evento global)
+  const loadBudgets = useCallback(async () => {
+    try {
+      const all = await getAllBudgets();
+      setBudgets(all);
+    } catch (error) {
+      console.error('Error loading budgets:', error);
+    }
+  }, []);
+
   useEffect(() => {
     const handler = () => {
       loadExpenses();
       loadBalance();
     };
-    window.addEventListener('dbTypeChanged', handler as any);
-    return () => window.removeEventListener('dbTypeChanged', handler as any);
+    window.addEventListener('dbTypeChanged', handler as EventListener);
+    return () => window.removeEventListener('dbTypeChanged', handler as EventListener);
   }, [loadExpenses, loadBalance]);
 
-  const handleDelete = async (id: number) => {
-    if (window.confirm('¿Estás seguro de que quieres eliminar este gasto?')) {
+  const handleDelete = (id: number) => {
+    setConfirmState({ open: true, id });
+  };
+
+  const handleDeleteConfirmed = async () => {
+    if (confirmState.id !== null) {
       try {
-        await deleteExpense(id);
+        await deleteExpense(confirmState.id);
         await loadExpenses();
         onExpenseDeleted();
+        toast.success('Gasto eliminado');
       } catch (error) {
         console.error('Error deleting expense:', error);
       }
     }
+    setConfirmState({ open: false, id: null });
   };
-
-  const getFrequencyLabel = (frequency: Expense['frequency']) => {
-    const labels = {
-      'one-time': 'Una vez',
-      'monthly': 'Mensual',
-      'bi-monthly': 'Cada 2 meses',
-      'quarterly': 'Cada 3 meses',
-      'annual': 'Anual'
-    };
-    return labels[frequency];
-  };
-
-
 
   const handlePaymentToggle = async (expense: Expense) => {
     if (!expense.id) return;
-  
     try {
-      // Find if there's an existing payment record for the current month
-      const existingPaymentForMonth = expense.paymentHistory?.find(record => 
+      const existingPaymentForMonth = expense.paymentHistory?.find((record) =>
         isSameMonth(new Date(record.date), currentMonth)
       );
-  
-      // Create updated payment history
+
       const updatedPaymentHistory = [...(expense.paymentHistory || [])];
-      
-      const newPaymentStatus = existingPaymentForMonth ? !existingPaymentForMonth.isPaid : true;
-      
+      const newPaymentStatus = existingPaymentForMonth
+        ? !existingPaymentForMonth.isPaid
+        : true;
+
       if (existingPaymentForMonth) {
-        // Update existing payment record for this month
-        const index = updatedPaymentHistory.findIndex(record => 
+        const index = updatedPaymentHistory.findIndex((record) =>
           isSameMonth(new Date(record.date), currentMonth)
         );
         updatedPaymentHistory[index] = {
           date: currentMonth,
           isPaid: newPaymentStatus,
-          amount: existingPaymentForMonth.amount || expense.amount
+          amount: existingPaymentForMonth.amount || expense.amount,
         };
       } else {
-        // Add new payment record for this month
         updatedPaymentHistory.push({
           date: currentMonth,
           isPaid: newPaymentStatus,
-          amount: expense.amount
+          amount: expense.amount,
         });
       }
-  
-      // Solo actualizar el flag global isPaid en gastos de una sola vez.
+
       const updatedExpense = {
         ...expense,
-        isPaid: expense.frequency === 'one-time' ? newPaymentStatus : expense.isPaid,
-        paymentHistory: updatedPaymentHistory
+        isPaid:
+          expense.frequency === 'one-time' ? newPaymentStatus : expense.isPaid,
+        paymentHistory: updatedPaymentHistory,
       };
       await updateExpense(updatedExpense);
       await loadExpenses();
@@ -185,12 +220,11 @@ export default function ExpenseList({ currentMonth, onEditExpense, onExpenseDele
     }
   };
 
-
-
   useEffect(() => {
     const updateData = async () => {
       await loadExpenses();
       await loadBalance();
+      await loadBudgets();
     };
     updateData();
 
@@ -202,627 +236,575 @@ export default function ExpenseList({ currentMonth, onEditExpense, onExpenseDele
     return () => {
       document.removeEventListener('expenseAdded', handleExpenseChange);
     };
-  }, [currentMonth, loadExpenses, loadBalance]);
+  }, [currentMonth, loadExpenses, loadBalance, loadBudgets]);
+
+  // Computed values for summary cards
+  const totalMonth = expenses.reduce((sum, e) => sum + e.amount, 0);
+  const paidMonth = expenses.reduce((sum, e) => {
+    const ph = e.paymentHistory?.find((record) =>
+      isSameMonth(new Date(record.date), currentMonth)
+    );
+    return ph?.isPaid ? sum + e.amount : sum;
+  }, 0);
+  const pendingMonth = totalMonth - paidMonth;
+  const balances = balance ? calculateBalances(balance) : { realBalance: 0, projectedBalance: 0 };
+
+  const filteredExpenses = expenses
+    .filter((expense) => {
+      const matchesCategory =
+        selectedCategory === null || expense.category === selectedCategory;
+      const matchesSearch =
+        searchText === '' ||
+        expense.description.toLowerCase().includes(searchText.toLowerCase());
+      return matchesCategory && matchesSearch;
+    })
+    .sort((a, b) => {
+      const currentMonthPaymentA = a.paymentHistory?.find((record) =>
+        isSameMonth(new Date(record.date), currentMonth)
+      );
+      const currentMonthPaymentB = b.paymentHistory?.find((record) =>
+        isSameMonth(new Date(record.date), currentMonth)
+      );
+      const isPaidA = currentMonthPaymentA?.isPaid || false;
+      const isPaidB = currentMonthPaymentB?.isPaid || false;
+
+      switch (sortConfig.key) {
+        case 'description':
+          return sortConfig.direction === 'asc'
+            ? a.description.localeCompare(b.description)
+            : b.description.localeCompare(a.description);
+        case 'date':
+          return sortConfig.direction === 'asc'
+            ? new Date(a.date).getTime() - new Date(b.date).getTime()
+            : new Date(b.date).getTime() - new Date(a.date).getTime();
+        case 'status':
+          if (isPaidA === isPaidB) return 0;
+          return sortConfig.direction === 'asc'
+            ? isPaidA ? 1 : -1
+            : isPaidA ? -1 : 1;
+        default:
+          return 0;
+      }
+    });
+
+  const categories = Array.from(new Set(expenses.map((e) => e.category)));
 
   return (
-    <Box sx={{ mt: 2 }} data-testid="expense-list">
-      <Box sx={{ mb: 1, width: '100%' }}>
-        <Box sx={{ 
-          borderBottom: 1, 
-          borderColor: 'divider', 
-          mb: 1,
-          display: 'flex',
-          overflowX: 'auto',
-          scrollBehavior: 'smooth',
-          gap: '4px',
-          padding: '2px 4px',
-          '&::-webkit-scrollbar': {
-            height: '8px'
-          },
-          '&::-webkit-scrollbar-track': {
-            background: '#f1f1f1',
-            borderRadius: '4px'
-          },
-          '&::-webkit-scrollbar-thumb': {
-            background: '#888',
-            borderRadius: '4px',
-            '&:hover': {
-              background: '#555'
-            }
-          },
-          '& button': {
-            minWidth: '120px',
-            padding: '8px 12px'
-          }
-        }}>
-          {eachMonthOfInterval({
-            start: new Date(new Date().getFullYear() - 1, 0, 1), // Enero del año anterior
-            end: new Date(new Date().getFullYear() + 1, 11, 31) // Diciembre del año siguiente
-          }).map((month) => {
-            const isCurrentYear = month.getFullYear() === new Date().getFullYear();
-            return (
-              <Button
-                key={month.toString()}
-                onClick={() => onMonthChange(month)}
-                ref={isSameMonth(month, currentMonth) ? (node) => {
-                  if (node) {
-                    setTimeout(() => {
-                      const parent = node.parentElement;
-                      if (parent) {
-                        const scrollLeft = node.offsetLeft - (parent.offsetWidth / 2) + (node.offsetWidth / 2);
-                        parent.scrollTo({ left: scrollLeft, behavior: 'smooth' });
-                      }
-                    }, 100);
-                  }
-                } : undefined}
-                sx={{
-                  px: 3,
-                  py: 2,
-                  border: '1px solid',
-                  borderColor: isSameMonth(month, currentMonth) ? 'primary.main' : 'divider',
-                  borderRadius: '8px 8px 0 0',
-                  color: isSameMonth(month, currentMonth) ? 'primary.main' : 'text.secondary',
-                  backgroundColor: isCurrentYear 
-                    ? isSameMonth(month, currentMonth) 
-                      ? 'rgba(25, 118, 210, 0.2)' 
-                      : 'rgba(25, 118, 210, 0.08)'
-                    : isSameMonth(month, currentMonth) 
-                      ? 'rgba(25, 118, 210, 0.12)' 
-                      : 'transparent',
-                  fontSize: '0.875rem',
-                  fontWeight: isSameMonth(month, currentMonth) ? 600 : 400,
-                  boxShadow: isSameMonth(month, currentMonth) ? '0px 2px 4px -1px rgba(0,0,0,0.2), 0px 4px 5px 0px rgba(0,0,0,0.14), 0px 1px 10px 0px rgba(0,0,0,0.12)' : 'none',
-                  '&:hover': {
-                    backgroundColor: isCurrentYear 
-                      ? 'rgba(25, 118, 210, 0.15)'
-                      : 'rgba(25, 118, 210, 0.08)',
-                    borderColor: 'primary.main'
-                  }
-                }}
-              >
-                {format(month, 'MMMM', { locale: es })}
-              </Button>
-            );
-          })}
-        </Box>
-      </Box>
-      {/* Cabecera de resumen: responsive y sticky en móvil */}
-      <Paper
+    <Box data-testid="expense-list">
+      {/* Month navigation */}
+      <Box
         sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 1,
           mb: 2,
-          p: 2,
-          bgcolor: 'background.paper',
-          position: isTabletOrMobile ? 'sticky' : 'relative',
-          top: isTabletOrMobile ? 0 : 'auto',
-          zIndex: 10,
-          border: 1,
-          borderColor: 'divider',
-          backdropFilter: isTabletOrMobile ? 'blur(6px)' : 'none'
         }}
       >
-        {(() => {
-          const totalMonth = expenses.reduce((sum, e) => sum + e.amount, 0);
-          const paidMonth = expenses.reduce((sum, e) => {
-            const ph = e.paymentHistory?.find(record => isSameMonth(new Date(record.date), currentMonth));
-            return ph?.isPaid ? sum + e.amount : sum;
-          }, 0);
-          const pendingMonth = totalMonth - paidMonth;
+        <IconButton
+          size="small"
+          onClick={() => onMonthChange(subMonths(currentMonth, 1))}
+          sx={{ color: t.textSecondary }}
+        >
+          <ChevronLeftIcon />
+        </IconButton>
+        <Typography
+          variant="h6"
+          sx={{ fontWeight: 700, minWidth: 160, textAlign: 'center', fontSize: '1rem' }}
+        >
+          {format(currentMonth, 'MMMM yyyy', { locale: es }).replace(/^\w/, (c) => c.toUpperCase())}
+        </Typography>
+        <IconButton
+          size="small"
+          onClick={() => onMonthChange(addMonths(currentMonth, 1))}
+          sx={{ color: t.textSecondary }}
+        >
+          <ChevronRightIcon />
+        </IconButton>
+      </Box>
 
-          const balances = balance ? calculateBalances(balance) : { realBalance: 0, projectedBalance: 0 };
+      {/* Summary cards */}
+      <Grid container spacing={1.5} sx={{ mb: 2 }}>
+        <Grid item xs={6} sm={3}>
+          <SummaryCard label="Total gastos" value={totalMonth} isCurrency tone="default" />
+        </Grid>
+        <Grid item xs={6} sm={3}>
+          <SummaryCard label="Pagados" value={paidMonth} isCurrency tone="success" />
+        </Grid>
+        <Grid item xs={6} sm={3}>
+          <SummaryCard label="Pendientes" value={pendingMonth} isCurrency tone="danger" />
+        </Grid>
+        <Grid item xs={6} sm={3}>
+          <SummaryCard
+            label="Balance real"
+            value={balances.realBalance}
+            isCurrency
+            tone={balances.realBalance >= 0 ? 'success' : 'danger'}
+          />
+        </Grid>
+      </Grid>
 
-          return (
-            <Box>
-              <Typography variant="h6" marginBottom={1}>
-                Gastos de {format(currentMonth, 'MMMM yyyy', { locale: es })}
-              </Typography>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, gap: '15px', flexWrap: "wrap" }}>
-                <Box sx={{ display: 'flex', gap: 2 }}>
-                  <Typography 
-                    variant="subtitle2" 
-                    sx={{ color: balances.realBalance >= 0 ? 'success.main' : 'error.main', fontWeight: 700 }}
-                  >
-                    Real: {formatCurrency(balances.realBalance)}
-                  </Typography>
-                  <Typography 
-                    variant="subtitle2" 
-                    sx={{ color: balances.projectedBalance >= 0 ? 'success.main' : 'error.main', fontWeight: 700 }}
-                  >
-                    Proy: {formatCurrency(balances.projectedBalance)}
-                  </Typography>
-                  {searchText && (
-                    <Typography 
-                      variant="subtitle2" 
-                      sx={{ fontWeight: 700 }}
-                    >
-                      Filtrado: {filtered}
-                    </Typography>
-                  )}
-                </Box>
-                <Box>
-                  <TextField
-                    label="Buscar por descripción"
-                    variant="outlined"
-                    value={searchText}
-                    onChange={(e) => setSearchText(e.target.value)}
-                    size="small"
-                    sx={{ fontSize: '0.875rem' }}
-                  />
-                </Box>
-                
-              </Box>
-
-              <Grid container spacing={1} sx={{ flexWrap: 'nowrap' }}>
-                <Grid item xs={4} sm={4}>
-                  <Box sx={{ p: { xs: 1, sm: 1.25 }, borderRadius: 1, bgcolor: 'action.hover' }}>
-                    <Typography variant="caption" color="text.secondary">Total gastos</Typography>
-                    <Typography variant={isMobile ? 'subtitle2' : 'subtitle1'} sx={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{formatCurrency(totalMonth)}</Typography>
-                  </Box>
-                </Grid>
-                <Grid item xs={4} sm={4}>
-                  <Box sx={{ p: { xs: 1, sm: 1.25 }, borderRadius: 1, bgcolor: 'action.hover' }}>
-                    <Typography variant="caption" color="text.secondary">Pagados</Typography>
-                    <Typography variant={isMobile ? 'subtitle2' : 'subtitle1'} color="success.main" sx={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{formatCurrency(paidMonth)}</Typography>
-                  </Box>
-                </Grid>
-                <Grid item xs={4} sm={4}>
-                  <Box sx={{ p: { xs: 1, sm: 1.25 }, borderRadius: 1, bgcolor: 'action.hover' }}>
-                    <Typography variant="caption" color="text.secondary">Pendientes</Typography>
-                    <Typography variant={isMobile ? 'subtitle2' : 'subtitle1'} color="error.main" sx={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{formatCurrency(pendingMonth)}</Typography>
-                  </Box>
-                </Grid>
-              </Grid>
-            </Box>
-          );
-        })()}
-      </Paper>
-
+      {/* Search and filter */}
       <Box sx={{ mb: 2 }}>
+        {/* Search bar */}
         <Box
           sx={{
             display: 'flex',
+            alignItems: 'center',
             gap: 1,
+            px: 1.5,
+            py: 0.75,
+            borderRadius: '12px',
+            border: `1px solid ${t.border}`,
+            backgroundColor: t.surface,
+            mb: 1.5,
+          }}
+        >
+          <SearchIcon sx={{ color: t.textMuted, fontSize: '1.1rem' }} />
+          <InputBase
+            fullWidth
+            placeholder="Buscar por descripción…"
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            sx={{ fontSize: '0.875rem', color: t.textPrimary }}
+          />
+          {searchText && (
+            <IconButton size="small" onClick={() => setSearchText('')} sx={{ p: 0.25 }}>
+              <ClearIcon sx={{ fontSize: '1rem', color: t.textMuted }} />
+            </IconButton>
+          )}
+        </Box>
+
+        {/* Category chips with budget progress */}
+        <Box
+          sx={{
+            display: 'flex',
+            gap: 0.75,
             overflowX: 'auto',
-            overflowY: 'hidden',
-            scrollBehavior: 'smooth',
-            py: 0.5,
-            px: 0.5,
+            pb: 0.5,
             flexWrap: 'nowrap',
             WebkitOverflowScrolling: 'touch',
-            '& > *': {
-              flex: '0 0 auto'
-            },
-            '&::-webkit-scrollbar': {
-              height: '8px'
-            },
-            '&::-webkit-scrollbar-track': {
-              background: '#f1f1f1',
-              borderRadius: '4px'
-            },
-            '&::-webkit-scrollbar-thumb': {
-              background: '#888',
-              borderRadius: '4px',
-              '&:hover': {
-                background: '#555'
-              }
-            }
+            '& > *': { flex: '0 0 auto' },
           }}
         >
           <Chip
             label="Todas"
+            size="small"
             onClick={() => setSelectedCategory(null)}
+            variant={selectedCategory === null ? 'filled' : 'outlined'}
             color={selectedCategory === null ? 'primary' : 'default'}
+            sx={{ fontWeight: 600 }}
           />
-          {Array.from(new Set(expenses.map(e => e.category))).map(category => (
-            <Chip
-              key={category}
-              label={category}
-              onClick={() => setSelectedCategory(category)}
-              color={selectedCategory === category ? 'primary' : 'default'}
-            />
-          ))}
+          {categories.map((category) => {
+            const budgetForCategory = budgets.find((b) => b.category === category);
+            const categoryTotal = expenses
+              .filter((e) => e.category === category)
+              .reduce((s, e) => s + e.amount, 0);
+            const hasBudget =
+              budgetForCategory && budgetForCategory.monthlyBudget > 0;
+            const progressPct = hasBudget
+              ? Math.min((categoryTotal / budgetForCategory.monthlyBudget) * 100, 100)
+              : 0;
+            const isOver = hasBudget && categoryTotal > budgetForCategory.monthlyBudget;
+
+            return (
+              <Box key={category} sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
+                <Chip
+                  label={category}
+                  size="small"
+                  onClick={() =>
+                    setSelectedCategory(selectedCategory === category ? null : category)
+                  }
+                  variant={selectedCategory === category ? 'filled' : 'outlined'}
+                  color={selectedCategory === category ? 'primary' : 'default'}
+                  sx={{ fontWeight: 500 }}
+                />
+                {hasBudget && (
+                  <LinearProgress
+                    variant="determinate"
+                    value={progressPct}
+                    sx={{
+                      height: 3,
+                      borderRadius: 2,
+                      '& .MuiLinearProgress-bar': {
+                        backgroundColor: isOver ? '#ef4444' : '#10b981',
+                      },
+                      backgroundColor: t.border,
+                    }}
+                  />
+                )}
+              </Box>
+            );
+          })}
         </Box>
+
+        {searchText && (
+          <Typography variant="caption" sx={{ color: t.textSecondary, mt: 0.5, display: 'block' }}>
+            Filtrado: {formatCurrency(filteredTotal)}
+          </Typography>
+        )}
       </Box>
 
+      {/* Mobile cards / Desktop table */}
       {isMobile ? (
         <Box>
-          {expenses
-            .filter(expense => {
-              const matchesCategory = selectedCategory === null || expense.category === selectedCategory;
-              const matchesSearch = searchText === '' || 
-                expense.description.toLowerCase().includes(searchText.toLowerCase());
-              return matchesCategory && matchesSearch;
-            })
-            .sort((a, b) => {
-              const currentMonthPaymentA = a.paymentHistory?.find(record => 
-                isSameMonth(new Date(record.date), currentMonth)
-              );
-              const currentMonthPaymentB = b.paymentHistory?.find(record => 
-                isSameMonth(new Date(record.date), currentMonth)
-              );
-              const isPaidA = currentMonthPaymentA?.isPaid || false;
-              const isPaidB = currentMonthPaymentB?.isPaid || false;
-
-              switch (sortConfig.key) {
-                case 'description':
-                  return sortConfig.direction === 'asc' 
-                    ? a.description.localeCompare(b.description)
-                    : b.description.localeCompare(a.description);
-                case 'date':
-                  return sortConfig.direction === 'asc'
-                    ? new Date(a.date).getTime() - new Date(b.date).getTime()
-                    : new Date(b.date).getTime() - new Date(a.date).getTime();
-                case 'status':
-                  if (isPaidA === isPaidB) return 0;
-                  if (sortConfig.direction === 'asc') {
-                    return isPaidA ? 1 : -1;
-                  } else {
-                    return isPaidA ? -1 : 1;
-                  }
-                default:
-                  return 0;
-              }
-            })
-            .map((expense) => {
-              const currentMonthPayment = expense.paymentHistory?.find(record => 
+          {loading ? (
+            <>
+              {[1, 2, 3, 4].map((i) => (
+                <Skeleton
+                  key={i}
+                  variant="rectangular"
+                  height={90}
+                  sx={{ borderRadius: 3, mb: 1 }}
+                />
+              ))}
+            </>
+          ) : filteredExpenses.length === 0 ? (
+            <EmptyState
+              icon={<TableChartIcon />}
+              title="No hay gastos este mes"
+              description="Pulsa el botón + para añadir un gasto"
+            />
+          ) : (
+            filteredExpenses.map((expense) => {
+              const currentMonthPayment = expense.paymentHistory?.find((record) =>
                 isSameMonth(new Date(record.date), currentMonth)
               );
               const isPaidInCurrentMonth = currentMonthPayment?.isPaid || false;
 
               return (
-                <Card key={expense.id} variant="outlined" sx={{ mb: 1 }}>
-                  <CardContent sx={{ pb: 1.5 }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>{expense.description}</Typography>
-                      <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>{formatCurrency(expense.amount)}</Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
-                      <Chip size="small" label={expense.category} />
-                      <Chip size="small" label={format(new Date(expense.date), 'dd/MM/yyyy')} />
-                      <Chip size="small" label={getFrequencyLabel(expense.frequency)} />
-                    </Box>
+                <SwipeableCard
+                  key={expense.id}
+                  onDelete={() => setConfirmState({ open: true, id: expense.id! })}
+                  disabled={false}
+                >
+                  <Card
+                    variant="outlined"
+                    sx={{ mb: 0, borderRadius: '20px', border: `1px solid ${t.border}` }}
+                  >
+                    <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                      {/* Header row */}
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'flex-start',
+                          mb: 1,
+                        }}
+                      >
+                        <Typography
+                          variant="body2"
+                          sx={{ fontWeight: 700, color: t.textPrimary, flex: 1, pr: 1 }}
+                        >
+                          {expense.description}
+                        </Typography>
+                        <Typography
+                          variant="body2"
+                          sx={{ fontWeight: 700, color: t.textPrimary, whiteSpace: 'nowrap' }}
+                        >
+                          {formatCurrency(expense.amount)}
+                        </Typography>
+                      </Box>
 
-                    <Divider sx={{ my: 1 }} />
+                      {/* Chips row */}
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mb: 1 }}>
+                        <CategoryChip category={expense.category} />
+                        <FrequencyChip frequency={expense.frequency} />
+                        <Chip
+                          size="small"
+                          label={format(new Date(expense.date), 'dd/MM/yyyy')}
+                          sx={{
+                            height: 22,
+                            fontSize: '0.7rem',
+                            backgroundColor: t.surfaceSoft,
+                            color: t.textSecondary,
+                            border: `1px solid ${t.border}`,
+                            '& .MuiChip-label': { px: 1 },
+                          }}
+                        />
+                      </Box>
 
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Checkbox
-                        checked={isPaidInCurrentMonth}
-                        onChange={() => handlePaymentToggle(expense)}
-                        size="small"
-                      />
-                      <Chip
-                        size="small"
-                        color={isPaidInCurrentMonth ? 'success' : 'error'}
-                        label={isPaidInCurrentMonth ? 'Pagado' : 'Pendiente'}
-                      />
-                    </Box>
-                  </CardContent>
-                  <CardActions sx={{ justifyContent: 'flex-end', pt: 0 }}>
-                    <IconButton size="small" onClick={() => expense.id && onEditExpense(expense)}>
-                      <EditIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton size="small" onClick={() => expense.id && handleDelete(expense.id!)}>
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  </CardActions>
-                </Card>
+                      <Divider sx={{ my: 1, borderColor: t.border }} />
+
+                      {/* Footer row */}
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                        }}
+                      >
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          <Checkbox
+                            checked={isPaidInCurrentMonth}
+                            onChange={() => handlePaymentToggle(expense)}
+                            size="small"
+                            sx={{ p: 0.25 }}
+                          />
+                          <StatusChip status={isPaidInCurrentMonth ? 'paid' : 'pending'} />
+                        </Box>
+                        <Box sx={{ display: 'flex', gap: 0.25 }}>
+                          <IconButton
+                            size="small"
+                            onClick={() => expense.id && onEditExpense(expense)}
+                            sx={{ color: t.textSecondary }}
+                          >
+                            <EditIcon sx={{ fontSize: '1rem' }} />
+                          </IconButton>
+                          <IconButton
+                            size="small"
+                            onClick={() => expense.id && handleDelete(expense.id)}
+                            sx={{ color: t.danger }}
+                          >
+                            <DeleteIcon sx={{ fontSize: '1rem' }} />
+                          </IconButton>
+                        </Box>
+                      </Box>
+                    </CardContent>
+                  </Card>
+                </SwipeableCard>
               );
-            })}
-          {expenses.length === 0 && (
-            <Paper sx={{ p: 2, textAlign: 'center' }}>No hay gastos registrados para este mes</Paper>
+            })
           )}
         </Box>
       ) : (
-        <TableContainer 
-          component={Paper} 
-          sx={{ 
-            bgcolor: (theme) => theme.palette.mode === 'dark'
-              ? 'rgba(17, 24, 39, 0.94)' // gris muy oscuro (tailwind slate-900 aprox)
-              : theme.palette.background.paper,
-            borderColor: (theme) => theme.palette.divider
+        <TableContainer
+          component={Paper}
+          sx={{
+            border: `1px solid ${t.border}`,
+            borderRadius: '16px',
+            overflow: 'hidden',
           }}
         >
-          <Table size="small" sx={{ 
-          backgroundColor: (theme) => theme.palette.mode === 'dark'
-            ? 'transparent'
-            : theme.palette.background.paper,
-          '& .MuiTableCell-root': { 
-            padding: '12px',
-            border: (theme) => `1px solid ${theme.palette.divider}`,
-            boxShadow: '0px 1px 2px rgba(0,0,0,0.05)',
-            transition: 'all 0.2s ease',
-            color: (theme) => theme.palette.text.primary
-          },
-          '& .MuiTableHead-root': {
-            '& .MuiTableCell-root': {
-              backgroundColor: (theme) => theme.palette.mode === 'dark' 
-                ? 'rgba(55, 65, 81, 0.95)' 
-                : 'rgba(245, 245, 245, 0.95)',
-              fontWeight: '600',
-              borderBottom: (theme) => `2px solid ${theme.palette.divider}`,
-              backdropFilter: 'blur(4px)',
-              position: 'sticky',
-              top: 0,
-              zIndex: 1,
-              color: (theme) => theme.palette.text.primary
-            }
-          },
-          '& .MuiTableRow-root:hover': {
-            '& .MuiTableCell-root': {
-              backgroundColor: (theme) => theme.palette.mode === 'dark'
-                ? 'rgba(75, 85, 99, 0.6)'
-                : 'rgba(245, 245, 245, 0.6)'
-            }
-          }
-        }}>
-          <TableHead>
-            <TableRow>
-              <TableCell 
-                sx={{ 
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  '&:hover': { 
-                    backgroundColor: (theme) => theme.palette.mode === 'dark'
-                      ? 'rgba(255, 255, 255, 0.08)'
-                      : 'rgba(0, 0, 0, 0.04)'
-                  },
-                  '&::after': {
-                    content: '""',
-                    display: 'inline-block',
-                    width: '0.5em',
-                    height: '0.5em',
-                    marginLeft: '0.5em',
-                    borderLeft: '0.3em solid transparent',
-                    borderRight: '0.3em solid transparent',
-                    borderTop: sortConfig.key === 'description' ? 
-                      (sortConfig.direction === 'asc' ? '0.3em solid currentColor' : 'none') : 
-                      'none',
-                    borderBottom: sortConfig.key === 'description' && sortConfig.direction === 'desc' ? 
-                      '0.3em solid currentColor' : 
-                      'none'
+          <Table size="small">
+            <TableHead>
+              <TableRow sx={{ backgroundColor: t.surfaceSoft }}>
+                <TableCell
+                  sx={{ fontWeight: 700, cursor: 'pointer', color: t.textSecondary, fontSize: '0.8rem' }}
+                  onClick={() =>
+                    setSortConfig({
+                      key: 'description',
+                      direction:
+                        sortConfig.key === 'description' && sortConfig.direction === 'asc'
+                          ? 'desc'
+                          : 'asc',
+                    })
                   }
-                }}
-                onClick={() => setSortConfig({
-                  key: 'description',
-                  direction: sortConfig.key === 'description' && sortConfig.direction === 'asc' ? 'desc' : 'asc'
-                })}
-              >
-                Descripción
-              </TableCell>
-              <TableCell align="right">Cantidad</TableCell>
-              <TableCell>Categoría</TableCell>
-              <TableCell 
-                onClick={() => setSortConfig({
-                  key: 'date',
-                  direction: sortConfig.key === 'date' && sortConfig.direction === 'asc' ? 'desc' : 'asc'
-                })}
-                sx={{ 
-                  cursor: 'pointer',
-                  '&:hover': { 
-                    backgroundColor: (theme) => theme.palette.mode === 'dark'
-                      ? 'rgba(255, 255, 255, 0.08)'
-                      : 'rgba(0, 0, 0, 0.04)'
-                  },
-                  '&::after': {
-                    content: '""',
-                    display: 'inline-block',
-                    width: '0.5em',
-                    height: '0.5em',
-                    marginLeft: '0.5em',
-                    borderLeft: '0.3em solid transparent',
-                    borderRight: '0.3em solid transparent',
-                    borderTop: sortConfig.key === 'date' ? 
-                      (sortConfig.direction === 'asc' ? '0.3em solid currentColor' : 'none') : 
-                      'none',
-                    borderBottom: sortConfig.key === 'date' && sortConfig.direction === 'desc' ? 
-                      '0.3em solid currentColor' : 
-                      'none'
+                >
+                  Descripción {sortConfig.key === 'description' ? (sortConfig.direction === 'asc' ? '↑' : '↓') : ''}
+                </TableCell>
+                <TableCell align="right" sx={{ fontWeight: 700, color: t.textSecondary, fontSize: '0.8rem' }}>
+                  Cantidad
+                </TableCell>
+                <TableCell sx={{ fontWeight: 700, color: t.textSecondary, fontSize: '0.8rem' }}>
+                  Categoría
+                </TableCell>
+                <TableCell
+                  sx={{ fontWeight: 700, cursor: 'pointer', color: t.textSecondary, fontSize: '0.8rem' }}
+                  onClick={() =>
+                    setSortConfig({
+                      key: 'date',
+                      direction:
+                        sortConfig.key === 'date' && sortConfig.direction === 'asc'
+                          ? 'desc'
+                          : 'asc',
+                    })
                   }
-                }}
-              >
-                Fecha
-              </TableCell>
-              <TableCell>Frecuencia</TableCell>
-              <TableCell 
-                onClick={() => setSortConfig({
-                  key: 'status',
-                  direction: sortConfig.key === 'status' && sortConfig.direction === 'asc' ? 'desc' : 'asc'
-                })}
-                sx={{ 
-                  cursor: 'pointer',
-                  '&:hover': { 
-                    backgroundColor: (theme) => theme.palette.mode === 'dark'
-                      ? 'rgba(255, 255, 255, 0.08)'
-                      : 'rgba(0, 0, 0, 0.04)'
-                  },
-                  '&::after': {
-                    content: '""',
-                    display: 'inline-block',
-                    width: '0.5em',
-                    height: '0.5em',
-                    marginLeft: '0.5em',
-                    borderLeft: '0.3em solid transparent',
-                    borderRight: '0.3em solid transparent',
-                    borderTop: sortConfig.key === 'status' ? 
-                      (sortConfig.direction === 'asc' ? '0.3em solid currentColor' : 'none') : 
-                      'none',
-                    borderBottom: sortConfig.key === 'status' && sortConfig.direction === 'desc' ? 
-                      '0.3em solid currentColor' : 
-                      'none'
+                >
+                  Fecha {sortConfig.key === 'date' ? (sortConfig.direction === 'asc' ? '↑' : '↓') : ''}
+                </TableCell>
+                <TableCell sx={{ fontWeight: 700, color: t.textSecondary, fontSize: '0.8rem' }}>
+                  Frecuencia
+                </TableCell>
+                <TableCell
+                  sx={{ fontWeight: 700, cursor: 'pointer', color: t.textSecondary, fontSize: '0.8rem' }}
+                  onClick={() =>
+                    setSortConfig({
+                      key: 'status',
+                      direction:
+                        sortConfig.key === 'status' && sortConfig.direction === 'asc'
+                          ? 'desc'
+                          : 'asc',
+                    })
                   }
-                }}
-              >
-                Estado
-              </TableCell>
-              <TableCell align="center">Acciones</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {expenses
-              .filter(expense => {
-                const matchesCategory = selectedCategory === null || expense.category === selectedCategory;
-                const matchesSearch = searchText === '' || 
-                  expense.description.toLowerCase().includes(searchText.toLowerCase());
-                return matchesCategory && matchesSearch;
-              })
-              .sort((a, b) => {
-                const currentMonthPaymentA = a.paymentHistory?.find(record => 
-                  isSameMonth(new Date(record.date), currentMonth)
-                );
-                const currentMonthPaymentB = b.paymentHistory?.find(record => 
-                  isSameMonth(new Date(record.date), currentMonth)
-                );
-                const isPaidA = currentMonthPaymentA?.isPaid || false;
-                const isPaidB = currentMonthPaymentB?.isPaid || false;
-
-                switch (sortConfig.key) {
-                  case 'description':
-                    return sortConfig.direction === 'asc' 
-                      ? a.description.localeCompare(b.description)
-                      : b.description.localeCompare(a.description);
-                  case 'date':
-                    return sortConfig.direction === 'asc'
-                      ? new Date(a.date).getTime() - new Date(b.date).getTime()
-                      : new Date(b.date).getTime() - new Date(a.date).getTime();
-                  case 'status':
-                    if (isPaidA === isPaidB) return 0;
-                    if (sortConfig.direction === 'asc') {
-                      return isPaidA ? 1 : -1;
-                    } else {
-                      return isPaidA ? -1 : 1;
-                    }
-                  default:
-                    return 0;
-                }
-              })
-              .map((expense) => {
-                // Check payment status for current month
-                const currentMonthPayment = expense.paymentHistory?.find(record => 
-                  isSameMonth(new Date(record.date), currentMonth)
-                );
-                const isPaidInCurrentMonth = currentMonthPayment?.isPaid || false;
-
-                return (
-                  <TableRow key={expense.id}>
-                    <TableCell>{expense.description}</TableCell>
-                    <TableCell align="right">
-                      <Box
-                        onClick={(e) => {
-                          const input = document.createElement('input');
-                          input.type = 'number';
-                          input.value = expense.amount.toString();
-                          input.style.width = '100px';
-                          input.style.padding = '4px';
-                          input.style.border = '1px solid #ccc';
-                          input.style.borderRadius = '4px';
-                          
-                          const cell = e.currentTarget;
-                          cell.innerHTML = '';
-                          cell.appendChild(input);
-                          input.focus();
-                          
-                          const handleBlur = async () => {
-                            const newAmount = parseFloat(input.value);
-                            if (!isNaN(newAmount) && expense.id) {
-                              try {
-                                const updatedExpense = { ...expense, amount: newAmount };
-                                const updatedPaymentHistory = [...(expense.paymentHistory || [])];
-                                const index = updatedPaymentHistory.findIndex(record => 
-                                  isSameMonth(new Date(record.date), currentMonth)
-                                );
-                                
-                                if (index >= 0) {
-                                  updatedPaymentHistory[index] = {
-                                    ...updatedPaymentHistory[index],
-                                    amount: newAmount
-                                  };
-                                } else {
-                                  updatedPaymentHistory.push({
-                                    date: currentMonth,
-                                    isPaid: false,
-                                    amount: newAmount
-                                  });
-                                }
-                                
-                                updatedExpense.paymentHistory = updatedPaymentHistory;
-                                await updateExpense(updatedExpense);
-                                await loadExpenses();
-                                cell.innerHTML = formatCurrency(newAmount);
-                              } catch (error) {
-                                console.error('Error updating expense amount:', error);
-                                cell.innerHTML = formatCurrency(expense.amount);
-                              }
-                            } else {
-                              cell.innerHTML = formatCurrency(expense.amount);
-                            }
-                          };
-                          
-                          input.addEventListener('blur', handleBlur);
-                          input.addEventListener('keypress', (e) => {
-                            if (e.key === 'Enter') {
-                              input.blur();
-                            }
-                          });
-                        }}
-                      >
-                        {formatCurrency(expense.amount)}
-                      </Box>
-                    </TableCell>
-                    <TableCell>{expense.category}</TableCell>
-                    <TableCell>{format(new Date(expense.date), 'dd/MM/yyyy')}</TableCell>
-                    <TableCell>{getFrequencyLabel(expense.frequency)}</TableCell>
-                    <TableCell align="left">
-                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'start', gap: 1 }}>
-                        <Checkbox
-                          checked={isPaidInCurrentMonth}
-                          onChange={() => handlePaymentToggle(expense)}
-                          size="small"
-                        />
-                        <Chip
-                          size="small"
-                          color={isPaidInCurrentMonth ? "success" : "error"}
-                          label={isPaidInCurrentMonth ? "Pagado" : "Pendiente"}
-                        />
-                      </Box>
-                    </TableCell>
-                    <TableCell align="left">
-                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
-                        <IconButton
-                          size="small"
-                          onClick={() => expense.id && onEditExpense(expense)}
-                        >
-                          <EditIcon fontSize="small" />
-                        </IconButton>
-                        <IconButton
-                          size="small"
-                          onClick={() => expense.id && handleDelete(expense.id)}
-                        >
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
-                      </Box>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            {expenses.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={7} align="center">
-                  No hay gastos registrados para este mes
+                >
+                  Estado {sortConfig.key === 'status' ? (sortConfig.direction === 'asc' ? '↑' : '↓') : ''}
+                </TableCell>
+                <TableCell align="center" sx={{ fontWeight: 700, color: t.textSecondary, fontSize: '0.8rem' }}>
+                  Acciones
                 </TableCell>
               </TableRow>
-            )}
-          </TableBody>
-          <TableFooter>
-            <TableRow>
-              <TableCell>Total Filtrado</TableCell>
-              <TableCell align="right">
-                {filtered}
-              </TableCell>
-              <TableCell colSpan={5}></TableCell>
-            </TableRow>
-          </TableFooter>
-        </Table>
-      </TableContainer>
+            </TableHead>
+            <TableBody>
+              {loading ? (
+                Array.from({ length: 4 }).map((_, i) => (
+                  <TableRow key={i}>
+                    {Array.from({ length: 7 }).map((__, j) => (
+                      <TableCell key={j}>
+                        <Skeleton variant="text" />
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              ) : filteredExpenses.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} sx={{ p: 0, border: 'none' }}>
+                    <EmptyState
+                      icon={<TableChartIcon />}
+                      title="No hay gastos este mes"
+                      description="Pulsa el botón + para añadir un gasto"
+                    />
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredExpenses.map((expense) => {
+                  const currentMonthPayment = expense.paymentHistory?.find((record) =>
+                    isSameMonth(new Date(record.date), currentMonth)
+                  );
+                  const isPaidInCurrentMonth = currentMonthPayment?.isPaid || false;
+
+                  return (
+                    <TableRow
+                      key={expense.id}
+                      sx={{
+                        '&:hover td': { backgroundColor: t.surfaceSoft },
+                        transition: 'background 0.1s',
+                      }}
+                    >
+                      <TableCell sx={{ fontWeight: 500 }}>{expense.description}</TableCell>
+                      <TableCell align="right">
+                        <Box
+                          sx={{ cursor: 'pointer', display: 'inline-block' }}
+                          onClick={(e) => {
+                            const input = document.createElement('input');
+                            input.type = 'number';
+                            input.value = expense.amount.toString();
+                            input.style.width = '100px';
+                            input.style.padding = '4px';
+                            input.style.border = `1px solid ${t.border}`;
+                            input.style.borderRadius = '4px';
+                            input.style.backgroundColor = t.surface;
+                            input.style.color = t.textPrimary;
+
+                            const cell = e.currentTarget;
+                            cell.innerHTML = '';
+                            cell.appendChild(input);
+                            input.focus();
+
+                            const handleBlur = async () => {
+                              const newAmount = parseFloat(input.value);
+                              if (!isNaN(newAmount) && expense.id) {
+                                try {
+                                  const updatedExpense = { ...expense, amount: newAmount };
+                                  const updatedPaymentHistory = [
+                                    ...(expense.paymentHistory || []),
+                                  ];
+                                  const index = updatedPaymentHistory.findIndex((record) =>
+                                    isSameMonth(new Date(record.date), currentMonth)
+                                  );
+
+                                  if (index >= 0) {
+                                    updatedPaymentHistory[index] = {
+                                      ...updatedPaymentHistory[index],
+                                      amount: newAmount,
+                                    };
+                                  } else {
+                                    updatedPaymentHistory.push({
+                                      date: currentMonth,
+                                      isPaid: false,
+                                      amount: newAmount,
+                                    });
+                                  }
+
+                                  updatedExpense.paymentHistory = updatedPaymentHistory;
+                                  await updateExpense(updatedExpense);
+                                  await loadExpenses();
+                                  cell.innerHTML = formatCurrency(newAmount);
+                                } catch (error) {
+                                  console.error('Error updating expense amount:', error);
+                                  cell.innerHTML = formatCurrency(expense.amount);
+                                }
+                              } else {
+                                cell.innerHTML = formatCurrency(expense.amount);
+                              }
+                            };
+
+                            input.addEventListener('blur', handleBlur);
+                            input.addEventListener('keypress', (ke) => {
+                              if (ke.key === 'Enter') input.blur();
+                            });
+                          }}
+                        >
+                          {formatCurrency(expense.amount)}
+                        </Box>
+                      </TableCell>
+                      <TableCell>
+                        <CategoryChip category={expense.category} />
+                      </TableCell>
+                      <TableCell sx={{ color: t.textSecondary, fontSize: '0.85rem' }}>
+                        {format(new Date(expense.date), 'dd/MM/yyyy')}
+                      </TableCell>
+                      <TableCell>
+                        <FrequencyChip frequency={expense.frequency} />
+                      </TableCell>
+                      <TableCell>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          <Checkbox
+                            checked={isPaidInCurrentMonth}
+                            onChange={() => handlePaymentToggle(expense)}
+                            size="small"
+                            sx={{ p: 0.25 }}
+                          />
+                          <StatusChip status={isPaidInCurrentMonth ? 'paid' : 'pending'} />
+                        </Box>
+                      </TableCell>
+                      <TableCell align="center">
+                        <Stack direction="row" spacing={0.5} justifyContent="center">
+                          <IconButton
+                            size="small"
+                            onClick={() => expense.id && onEditExpense(expense)}
+                            sx={{ color: t.primary }}
+                          >
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                          <IconButton
+                            size="small"
+                            onClick={() => expense.id && handleDelete(expense.id)}
+                            sx={{ color: t.danger }}
+                          >
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </Stack>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+            <TableFooter>
+              <TableRow sx={{ backgroundColor: t.surfaceSoft }}>
+                <TableCell sx={{ fontWeight: 700, color: t.textSecondary }}>
+                  Total Filtrado
+                </TableCell>
+                <TableCell align="right" sx={{ fontWeight: 700 }}>
+                  {formatCurrency(filteredTotal)}
+                </TableCell>
+                <TableCell colSpan={5} />
+              </TableRow>
+            </TableFooter>
+          </Table>
+        </TableContainer>
       )}
+
+      <ConfirmDialog
+        open={confirmState.open}
+        title="Eliminar gasto"
+        description="¿Estás seguro de que quieres eliminar este gasto? Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        onConfirm={handleDeleteConfirmed}
+        onCancel={() => setConfirmState({ open: false, id: null })}
+        destructive
+      />
     </Box>
   );
 }
