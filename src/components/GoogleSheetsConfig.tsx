@@ -18,12 +18,14 @@ import CloudSyncIcon from '@mui/icons-material/CloudSync';
 import TableViewIcon from '@mui/icons-material/TableView';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import NotificationsIcon from '@mui/icons-material/Notifications';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import { validateGoogleSheetsConfig } from '../db/googleSheetsService';
 import { getGoogleSheetsConfig, saveGoogleSheetsConfig } from '../db';
 import DatabaseBackup from './DatabaseBackup';
 import GoogleSheetsSync from './GoogleSheetsSync';
 import BudgetConfig from './BudgetConfig';
 import NotificationSettings from './NotificationSettings';
+import AIConfig from './AIConfig';
 import { tokens } from '../theme';
 
 interface GoogleSheetsConfig {
@@ -225,6 +227,29 @@ export default function GoogleSheetsConfig() {
         <Divider />
         <AccordionDetails sx={{ p: 2 }}>
           <NotificationSettings />
+        </AccordionDetails>
+      </Accordion>
+
+      {/* Inteligencia Artificial */}
+      <Accordion
+        disableGutters
+        elevation={0}
+        sx={{
+          border: `1px solid ${t.border}`,
+          borderRadius: '16px !important',
+          '&:before': { display: 'none' },
+          overflow: 'hidden',
+        }}
+      >
+        <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={sectionHeaderSx}>
+          <AutoAwesomeIcon sx={{ color: t.warning, fontSize: '1.25rem' }} />
+          <Typography variant="body1" sx={{ fontWeight: 600 }}>
+            Inteligencia Artificial
+          </Typography>
+        </AccordionSummary>
+        <Divider />
+        <AccordionDetails sx={{ p: 2 }}>
+          <AIConfig />
         </AccordionDetails>
       </Accordion>
 
