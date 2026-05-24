@@ -215,7 +215,7 @@ function AppInner({ theme, toggleTheme }: { theme: 'light' | 'dark'; toggleTheme
   return (
     <Box
       sx={{
-        minHeight: '100vh',
+        minHeight: '100dvh',
         backgroundColor: t.background,
         display: 'flex',
       }}
@@ -284,7 +284,6 @@ function AppInner({ theme, toggleTheme }: { theme: 'light' | 'dark'; toggleTheme
           minWidth: 0,
           display: 'flex',
           flexDirection: 'column',
-          overflowX: 'hidden',
         }}
       >
         {/* Mobile header */}
@@ -325,7 +324,7 @@ function AppInner({ theme, toggleTheme }: { theme: 'light' | 'dark'; toggleTheme
         )}
 
         {/* Page content */}
-        <Box sx={{ flex: 1, overflowY: 'auto', p: { xs: 2, sm: 3, md: 4 }, pb: { xs: 12, lg: 4 } }}>
+        <Box sx={{ p: { xs: 2, sm: 3, md: 4 }, pb: { xs: 12, lg: 4 } }}>
           <Outlet />
         </Box>
       </Box>
