@@ -62,8 +62,14 @@ export interface CategoryBudget {
   updatedAt: Date;
 }
 
+export interface AIConfig {
+  id?: number;
+  apiKey: string;
+  updatedAt: Date;
+}
+
 const DB_NAME = 'expense-tracker';
-const DB_VERSION = 78; // v78: added budgets store
+const DB_VERSION = 79; // v79: added aiConfig store
 
 export interface GoogleSheetsConfig {
   id?: number;
@@ -122,6 +128,11 @@ export type ExpenseDB = {
     key: number;
     value: CategoryBudget;
     indexes: { 'category': string; 'updatedAt': Date };
+  };
+  aiConfig: {
+    key: number;
+    value: AIConfig;
+    indexes: { 'updatedAt': Date };
   };
 };
 
@@ -187,6 +198,14 @@ function setupBudgetsStore(db: IDBPDatabase<ExpenseDB> | IDBDatabase) {
   if (!db.objectStoreNames.contains('budgets')) {
     const store = db.createObjectStore('budgets', { keyPath: 'id', autoIncrement: true });
     store.createIndex('category', 'category');
+    store.createIndex('updatedAt', 'updatedAt');
+  }
+}
+
+// Store para configuración de IA
+function setupAIConfigStore(db: IDBPDatabase<ExpenseDB> | IDBDatabase) {
+  if (!db.objectStoreNames.contains('aiConfig')) {
+    const store = db.createObjectStore('aiConfig', { keyPath: 'id', autoIncrement: true });
     store.createIndex('updatedAt', 'updatedAt');
   }
 }
@@ -272,6 +291,7 @@ export async function initDB() {
         setupInvestmentsStore(db);
         setupDbConfigStore(db);
         setupBudgetsStore(db);
+        setupAIConfigStore(db);
       },
     });
 
@@ -279,7 +299,8 @@ export async function initDB() {
     const storeNames = Array.from(db.objectStoreNames);
     console.log(`Stores creados: ${storeNames.join(', ')}`);
 
-    if (!storeNames.includes('expenses') || !storeNames.includes('balance') || !storeNames.includes('sheetConfig') || !storeNames.includes('savings') || !storeNames.includes('investments') || !storeNames.includes('dbConfig') || !storeNames.includes('budgets')) {
+    const requiredStores = ['expenses', 'balance', 'sheetConfig', 'savings', 'investments', 'dbConfig', 'budgets', 'aiConfig'];
+    if (requiredStores.some((s) => !storeNames.includes(s))) {
       console.warn('Stores faltantes detectados, intentando reiniciar la base de datos...', storeNames);
       // Intento de recuperación: cerrar, eliminar y recrear la BD
       try {
@@ -297,11 +318,12 @@ export async function initDB() {
           setupInvestmentsStore(db2);
           setupDbConfigStore(db2);
           setupBudgetsStore(db2);
+          setupAIConfigStore(db2);
         },
       });
       const recreatedStores = Array.from(recreated.objectStoreNames);
       console.log('Stores después de recreación:', recreatedStores);
-      if (!recreatedStores.includes('expenses') || !recreatedStores.includes('balance') || !recreatedStores.includes('sheetConfig') || !recreatedStores.includes('savings') || !recreatedStores.includes('investments') || !recreatedStores.includes('dbConfig') || !recreatedStores.includes('budgets')) {
+      if (requiredStores.some((s) => !recreatedStores.includes(s))) {
         console.error('No se pudieron crear todos los stores necesarios tras la recreación. Stores existentes:', recreatedStores);
         throw new Error('Faltan stores en la base de datos tras recreación');
       }

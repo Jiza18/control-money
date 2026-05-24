@@ -48,6 +48,7 @@ interface ExpenseFormProps {
   onExpenseAdded: () => void;
   expense?: Expense | null;
   selectedMonth: Date;
+  prefill?: Partial<Omit<Expense, 'id'>>;
 }
 
 export default function ExpenseForm({
@@ -56,6 +57,7 @@ export default function ExpenseForm({
   onExpenseAdded,
   expense: expenseProp,
   selectedMonth,
+  prefill,
 }: ExpenseFormProps) {
   const muiTheme = useTheme();
   const t = tokens[muiTheme.palette.mode];
@@ -85,16 +87,16 @@ export default function ExpenseForm({
       });
     } else {
       setExpense({
-        amount: 0,
-        category: '',
-        description: '',
-        date: selectedMonth,
-        frequency: 'one-time',
-        isPaid: false,
+        amount: prefill?.amount ?? 0,
+        category: prefill?.category ?? '',
+        description: prefill?.description ?? '',
+        date: prefill?.date ? new Date(prefill.date as unknown as string) : selectedMonth,
+        frequency: prefill?.frequency ?? 'one-time',
+        isPaid: prefill?.isPaid ?? false,
         paymentHistory: [],
       });
     }
-  }, [expenseProp, selectedMonth]);
+  }, [expenseProp, selectedMonth, prefill]);
 
   const handleAmountChange = async (newAmount: number) => {
     setExpense((prev) => ({ ...prev, amount: newAmount }));
