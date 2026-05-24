@@ -324,25 +324,21 @@ export default function ExpenseList({
       </Box>
 
       {/* Summary cards */}
-      <Grid container spacing={1.5} sx={{ mb: 2 }}>
-        <Grid item xs={6} sm={3}>
-          <SummaryCard label="Total gastos" value={totalMonth} isCurrency tone="default" />
-        </Grid>
-        <Grid item xs={6} sm={3}>
-          <SummaryCard label="Pagados" value={paidMonth} isCurrency tone="success" />
-        </Grid>
-        <Grid item xs={6} sm={3}>
-          <SummaryCard label="Pendientes" value={pendingMonth} isCurrency tone="danger" />
-        </Grid>
-        <Grid item xs={6} sm={3}>
-          <SummaryCard
-            label="Balance real"
-            value={balances.realBalance}
-            isCurrency
-            tone={balances.realBalance >= 0 ? 'success' : 'danger'}
-          />
-        </Grid>
-      </Grid>
+      <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', mb: 2 }}>
+        {(
+          [
+            { label: 'Total gastos', value: totalMonth, tone: 'default' },
+            { label: 'Pagados', value: paidMonth, tone: 'success' },
+            { label: 'Pendientes', value: pendingMonth, tone: 'danger' },
+            { label: 'Balance real', value: balances.realBalance, tone: balances.realBalance >= 0 ? 'success' : 'danger' },
+            { label: 'Proyectado', value: balances.projectedBalance, tone: balances.projectedBalance >= 0 ? 'success' : 'danger' },
+          ] as const
+        ).map((card) => (
+          <Box key={card.label} sx={{ flex: '1 1 130px', minWidth: 0 }}>
+            <SummaryCard label={card.label} value={card.value} isCurrency tone={card.tone} />
+          </Box>
+        ))}
+      </Box>
 
       {/* Search and filter */}
       <Box sx={{ mb: 2 }}>
