@@ -62,13 +62,10 @@ export default function Expenses() {
     setIsExpenseFormOpen(true);
   };
 
-  const openCamera = async () => {
+  // Must be synchronous — iOS Safari blocks programmatic input.click()
+  // if there's any await before it (loses the user gesture context)
+  const openCamera = () => {
     setChoiceOpen(false);
-    const config = await getAIConfig();
-    if (!config?.apiKey) {
-      toast.error('Configura tu API key de Anthropic en Configuración → Inteligencia Artificial');
-      return;
-    }
     fileInputRef.current?.click();
   };
 
@@ -81,7 +78,9 @@ export default function Expenses() {
     setIsProcessing(true);
     try {
       const config = await getAIConfig();
-      if (!config?.apiKey) throw new Error('API key no configurada');
+      if (!config?.apiKey) {
+        throw new Error('Configura tu API key de Anthropic en Configuración → Inteligencia Artificial');
+      }
 
       const { base64, mimeType } = await resizeImage(file);
       const parsed: ParsedReceipt = await parseReceiptWithAI(base64, mimeType, config.apiKey);
