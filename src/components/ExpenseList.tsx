@@ -21,6 +21,15 @@ import {
   Divider,
   Skeleton,
   LinearProgress,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  Button,
+  RadioGroup,
+  FormControlLabel,
+  Radio,
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -32,7 +41,7 @@ import ClearIcon from '@mui/icons-material/Clear';
 import TableChartIcon from '@mui/icons-material/TableChart';
 import { format, isSameMonth, addMonths, subMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Expense } from '../db/config';
+import { Expense, PaymentRecord } from '../db/config';
 import { getExpensesByMonth, deleteExpense, getCurrentBalance, updateExpense } from '../db';
 import {
   SummaryCard,
@@ -206,6 +215,81 @@ export default function ExpenseList({
       }
     }
     setConfirmState({ open: false, id: null });
+  };
+
+  // --- Edición de importe (con alcance para gastos recurrentes) ---
+  const [amountEdit, setAmountEdit] = useState<{
+    open: boolean;
+    expense: Expense | null;
+    value: string;
+    scope: 'month' | 'forward';
+  }>({ open: false, expense: null, value: '', scope: 'month' });
+
+  const openAmountEdit = (expense: Expense) => {
+    setAmountEdit({
+      open: true,
+      expense,
+      value: String(expense.amount),
+      scope: 'month',
+    });
+  };
+
+  const buildAmountUpdate = (
+    expense: Expense,
+    newAmount: number,
+    scope: 'month' | 'forward'
+  ): Expense => {
+    const history: PaymentRecord[] = (expense.paymentHistory || []).map((r) => ({ ...r }));
+    const curKey = currentMonth.getFullYear() * 12 + currentMonth.getMonth();
+
+    // Fija el importe del mes actual, preservando su estado de pago
+    const upsertMonth = (arr: PaymentRecord[]) => {
+      const idx = arr.findIndex((r) => isSameMonth(new Date(r.date), currentMonth));
+      if (idx >= 0) {
+        arr[idx] = { ...arr[idx], amount: newAmount };
+      } else {
+        arr.push({ date: currentMonth, isPaid: false, amount: newAmount });
+      }
+      return arr;
+    };
+
+    // Gastos puntuales: no hay "meses siguientes", solo cambia el importe
+    if (expense.frequency === 'one-time') {
+      return { ...expense, amount: newAmount, paymentHistory: upsertMonth(history) };
+    }
+
+    if (scope === 'month') {
+      // Solo este mes: no tocamos el importe base ni los meses futuros
+      return { ...expense, paymentHistory: upsertMonth(history) };
+    }
+
+    // Este mes y los siguientes: importe base + registros de este mes en adelante
+    const forward = history.map((r) => {
+      const d = new Date(r.date);
+      const k = d.getFullYear() * 12 + d.getMonth();
+      return k >= curKey ? { ...r, amount: newAmount } : r;
+    });
+    return { ...expense, amount: newAmount, paymentHistory: upsertMonth(forward) };
+  };
+
+  const handleAmountSave = async (scope: 'month' | 'forward') => {
+    const exp = amountEdit.expense;
+    const newAmount = parseFloat(amountEdit.value);
+    setAmountEdit((s) => ({ ...s, open: false }));
+
+    if (!exp?.id || isNaN(newAmount)) return;
+
+    const updated = buildAmountUpdate(exp, newAmount, scope);
+    try {
+      // Actualización optimista: la fila del mes actual muestra el nuevo importe
+      setExpenses((prev) =>
+        prev.map((e) => (e.id === exp.id ? { ...updated, amount: newAmount } : e))
+      );
+      await updateExpense(updated);
+    } catch (error) {
+      console.error('Error updating expense amount:', error);
+      await loadExpenses();
+    }
   };
 
   const handlePaymentToggle = async (expense: Expense) => {
@@ -649,7 +733,14 @@ export default function ExpenseList({
                         </Typography>
                         <Typography
                           variant="body2"
-                          sx={{ fontWeight: 700, color: t.textPrimary, whiteSpace: 'nowrap' }}
+                          onClick={() => expense.id && openAmountEdit(expense)}
+                          sx={{
+                            fontWeight: 700,
+                            color: t.textPrimary,
+                            whiteSpace: 'nowrap',
+                            cursor: 'pointer',
+                            borderBottom: `1px dashed ${t.border}`,
+                          }}
                         >
                           {formatCurrency(expense.amount)}
                         </Typography>
@@ -829,65 +920,12 @@ export default function ExpenseList({
                       <TableCell sx={{ fontWeight: 500 }}>{expense.description}</TableCell>
                       <TableCell align="right">
                         <Box
-                          sx={{ cursor: 'pointer', display: 'inline-block' }}
-                          onClick={(e) => {
-                            const input = document.createElement('input');
-                            input.type = 'number';
-                            input.value = expense.amount.toString();
-                            input.style.width = '100px';
-                            input.style.padding = '4px';
-                            input.style.border = `1px solid ${t.border}`;
-                            input.style.borderRadius = '4px';
-                            input.style.backgroundColor = t.surface;
-                            input.style.color = t.textPrimary;
-
-                            const cell = e.currentTarget;
-                            cell.innerHTML = '';
-                            cell.appendChild(input);
-                            input.focus();
-
-                            const handleBlur = async () => {
-                              const newAmount = parseFloat(input.value);
-                              if (!isNaN(newAmount) && expense.id) {
-                                try {
-                                  const updatedExpense = { ...expense, amount: newAmount };
-                                  const updatedPaymentHistory = [
-                                    ...(expense.paymentHistory || []),
-                                  ];
-                                  const index = updatedPaymentHistory.findIndex((record) =>
-                                    isSameMonth(new Date(record.date), currentMonth)
-                                  );
-
-                                  if (index >= 0) {
-                                    updatedPaymentHistory[index] = {
-                                      ...updatedPaymentHistory[index],
-                                      amount: newAmount,
-                                    };
-                                  } else {
-                                    updatedPaymentHistory.push({
-                                      date: currentMonth,
-                                      isPaid: false,
-                                      amount: newAmount,
-                                    });
-                                  }
-
-                                  updatedExpense.paymentHistory = updatedPaymentHistory;
-                                  await updateExpense(updatedExpense);
-                                  await loadExpenses();
-                                  cell.innerHTML = formatCurrency(newAmount);
-                                } catch (error) {
-                                  console.error('Error updating expense amount:', error);
-                                  cell.innerHTML = formatCurrency(expense.amount);
-                                }
-                              } else {
-                                cell.innerHTML = formatCurrency(expense.amount);
-                              }
-                            };
-
-                            input.addEventListener('blur', handleBlur);
-                            input.addEventListener('keypress', (ke) => {
-                              if (ke.key === 'Enter') input.blur();
-                            });
+                          onClick={() => expense.id && openAmountEdit(expense)}
+                          title="Editar importe"
+                          sx={{
+                            cursor: 'pointer',
+                            display: 'inline-block',
+                            borderBottom: `1px dashed ${t.border}`,
                           }}
                         >
                           {formatCurrency(expense.amount)}
@@ -958,6 +996,81 @@ export default function ExpenseList({
           </Table>
         </TableContainer>
       )}
+
+      {/* Diálogo de edición de importe */}
+      <Dialog
+        open={amountEdit.open}
+        onClose={() => setAmountEdit((s) => ({ ...s, open: false }))}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 700 }}>Editar importe</DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '8px !important' }}>
+          {amountEdit.expense && (
+            <Typography variant="body2" sx={{ color: t.textSecondary }}>
+              {amountEdit.expense.description}
+            </Typography>
+          )}
+          <TextField
+            label="Importe"
+            type="number"
+            value={amountEdit.value}
+            onChange={(e) => setAmountEdit((s) => ({ ...s, value: e.target.value }))}
+            autoFocus
+            fullWidth
+            inputProps={{ step: '0.01' }}
+            InputProps={{ endAdornment: <Typography sx={{ color: t.textSecondary }}>€</Typography> }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handleAmountSave(amountEdit.scope);
+              }
+            }}
+          />
+
+          {amountEdit.expense && amountEdit.expense.frequency !== 'one-time' && (
+            <Box>
+              <Typography variant="caption" sx={{ color: t.textSecondary, fontWeight: 600 }}>
+                ¿A qué meses aplicar el nuevo importe?
+              </Typography>
+              <RadioGroup
+                value={amountEdit.scope}
+                onChange={(e) =>
+                  setAmountEdit((s) => ({ ...s, scope: e.target.value as 'month' | 'forward' }))
+                }
+              >
+                <FormControlLabel
+                  value="month"
+                  control={<Radio size="small" />}
+                  label="Solo este mes"
+                />
+                <FormControlLabel
+                  value="forward"
+                  control={<Radio size="small" />}
+                  label="Este mes y los siguientes"
+                />
+              </RadioGroup>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button
+            onClick={() => setAmountEdit((s) => ({ ...s, open: false }))}
+            variant="outlined"
+            sx={{ borderRadius: '12px' }}
+          >
+            Cancelar
+          </Button>
+          <Button
+            onClick={() => handleAmountSave(amountEdit.scope)}
+            variant="contained"
+            color="primary"
+            sx={{ borderRadius: '12px' }}
+          >
+            Guardar
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <ConfirmDialog
         open={confirmState.open}
