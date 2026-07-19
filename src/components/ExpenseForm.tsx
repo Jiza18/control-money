@@ -6,6 +6,7 @@ import {
   FormControl,
   InputLabel,
   Select,
+  OutlinedInput,
   MenuItem,
   Dialog,
   DialogTitle,
@@ -279,10 +280,11 @@ export default function ExpenseForm({
             />
 
             <FormControl fullWidth>
-              <InputLabel>Cuenta</InputLabel>
+              <InputLabel id="account-label" shrink>Cuenta</InputLabel>
               <Select
+                labelId="account-label"
                 value={expense.accountId != null ? String(expense.accountId) : ''}
-                label="Cuenta"
+                input={<OutlinedInput notched label="Cuenta" />}
                 onChange={(e) =>
                   setExpense({
                     ...expense,
