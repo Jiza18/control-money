@@ -27,6 +27,10 @@ export async function exportDatabase() {
     data.sheetConfig = await db.getAll('sheetConfig');
   }
 
+  if (db.objectStoreNames.contains('accounts')) {
+    data.accounts = await db.getAll('accounts');
+  }
+
   return data;
 }
 
@@ -132,10 +136,27 @@ export async function importDatabase(data: Record<string, any[]>) {
       };
       await store.add(normalized);
     }
-    
+
     await tx.done;
   }
-  
+
+  if (data.accounts && db.objectStoreNames.contains('accounts')) {
+    const tx = db.transaction('accounts', 'readwrite');
+    const store = tx.objectStore('accounts');
+
+    await store.clear();
+
+    for (const account of data.accounts) {
+      const normalized = {
+        ...account,
+        createdAt: account?.createdAt instanceof Date ? account.createdAt : new Date(account?.createdAt)
+      };
+      await store.add(normalized);
+    }
+
+    await tx.done;
+  }
+
   return true;
 }
 

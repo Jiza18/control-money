@@ -2,6 +2,7 @@ export { default as MoneyAmount } from './MoneyAmount';
 export { default as SummaryCard } from './SummaryCard';
 export { default as StatusChip } from './StatusChip';
 export { default as CategoryChip } from './CategoryChip';
+export { default as AccountChip } from './AccountChip';
 export { default as FrequencyChip } from './FrequencyChip';
 export { default as EmptyState } from './EmptyState';
 export { default as ConfirmDialog } from './ConfirmDialog';

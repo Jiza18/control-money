@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS expenses (
   is_paid BOOLEAN NOT NULL DEFAULT 0,
   payment_history TEXT, -- JSON string
   duration INTEGER,
+  account_id INTEGER,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
@@ -145,6 +146,18 @@ export async function initializeTursoDatabase(client: Client): Promise<void> {
     for (const statement of statements) {
       if (statement.trim()) {
         await client.execute(statement.trim());
+      }
+    }
+
+    // Migración: añadir columna account_id a tablas expenses existentes.
+    // SQLite no soporta "ADD COLUMN IF NOT EXISTS", así que ignoramos el error
+    // "duplicate column name" cuando la columna ya existe.
+    try {
+      await client.execute('ALTER TABLE expenses ADD COLUMN account_id INTEGER');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (!/duplicate column name/i.test(message)) {
+        throw err;
       }
     }
 

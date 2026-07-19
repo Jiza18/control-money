@@ -19,9 +19,10 @@ import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { es } from 'date-fns/locale';
-import { Expense } from '../db/config';
+import { Expense, Account } from '../db/config';
 import { addExpense, updateExpense } from '../db';
-import { FormSection } from './ui';
+import { getAllAccounts } from '../db/accountsService';
+import { FormSection, AccountChip } from './ui';
 import { tokens } from '../theme';
 
 const categories = [
@@ -63,6 +64,8 @@ export default function ExpenseForm({
   const t = tokens[muiTheme.palette.mode];
   const isMobile = useMediaQuery(muiTheme.breakpoints.down('sm'));
 
+  const [accounts, setAccounts] = useState<Account[]>([]);
+
   const [expense, setExpense] = useState<Omit<Expense, 'id'>>(() => ({
     amount: 0,
     category: '',
@@ -72,6 +75,13 @@ export default function ExpenseForm({
     isPaid: false,
     paymentHistory: [],
   }));
+
+  useEffect(() => {
+    if (!open) return;
+    getAllAccounts()
+      .then(setAccounts)
+      .catch((error) => console.error('Error loading accounts:', error));
+  }, [open]);
 
   useEffect(() => {
     if (expenseProp) {
@@ -267,6 +277,40 @@ export default function ExpenseForm({
               multiline
               rows={2}
             />
+
+            <FormControl fullWidth>
+              <InputLabel>Cuenta</InputLabel>
+              <Select
+                value={expense.accountId ?? ''}
+                label="Cuenta"
+                onChange={(e) =>
+                  setExpense({
+                    ...expense,
+                    accountId:
+                      e.target.value === '' ? undefined : Number(e.target.value),
+                  })
+                }
+                renderValue={(value) => {
+                  if (value === '' || value == null) return 'Sin cuenta';
+                  const acc = accounts.find((a) => a.id === value);
+                  return acc ? (
+                    <AccountChip name={acc.name} color={acc.color} />
+                  ) : (
+                    'Sin cuenta'
+                  );
+                }}
+                displayEmpty
+              >
+                <MenuItem value="">
+                  <em>Sin cuenta</em>
+                </MenuItem>
+                {accounts.map((account) => (
+                  <MenuItem key={account.id} value={account.id}>
+                    <AccountChip name={account.name} color={account.color} />
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
           </FormSection>
 
           {/* Sección: Monto y fecha */}

@@ -33,8 +33,8 @@ class TursoExpenseRepository implements ExpenseRepository {
 
   async create(expense: Omit<Expense, 'id'>): Promise<Expense> {
     const result = await this.client.execute({
-      sql: `INSERT INTO expenses (amount, category, description, date, frequency, next_payment_date, is_paid, payment_history, duration) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
+      sql: `INSERT INTO expenses (amount, category, description, date, frequency, next_payment_date, is_paid, payment_history, duration, account_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
       args: [
         expense.amount,
         expense.category,
@@ -44,7 +44,8 @@ class TursoExpenseRepository implements ExpenseRepository {
         expense.nextPaymentDate ? dateToString(expense.nextPaymentDate) : null,
         booleanToNumber(expense.isPaid),
         expense.paymentHistory ? JSON.stringify(expense.paymentHistory) : null,
-        expense.duration || null
+        expense.duration || null,
+        expense.accountId ?? null
       ]
     });
 
@@ -53,8 +54,8 @@ class TursoExpenseRepository implements ExpenseRepository {
 
   async update(expense: Expense): Promise<Expense> {
     await this.client.execute({
-      sql: `UPDATE expenses SET amount = ?, category = ?, description = ?, date = ?, frequency = ?, 
-            next_payment_date = ?, is_paid = ?, payment_history = ?, duration = ?, updated_at = CURRENT_TIMESTAMP 
+      sql: `UPDATE expenses SET amount = ?, category = ?, description = ?, date = ?, frequency = ?,
+            next_payment_date = ?, is_paid = ?, payment_history = ?, duration = ?, account_id = ?, updated_at = CURRENT_TIMESTAMP
             WHERE id = ?`,
       args: [
         expense.amount,
@@ -66,6 +67,7 @@ class TursoExpenseRepository implements ExpenseRepository {
         booleanToNumber(expense.isPaid),
         expense.paymentHistory ? JSON.stringify(expense.paymentHistory) : null,
         expense.duration || null,
+        expense.accountId ?? null,
         expense.id!
       ]
     });
@@ -219,7 +221,8 @@ class TursoExpenseRepository implements ExpenseRepository {
       nextPaymentDate: row.next_payment_date ? stringToDate(row.next_payment_date as string) : undefined,
       isPaid: numberToBoolean(row.is_paid as number),
       paymentHistory: row.payment_history ? JSON.parse(row.payment_history as string) as PaymentRecord[] : undefined,
-      duration: row.duration as number || undefined
+      duration: row.duration as number || undefined,
+      accountId: row.account_id != null ? (row.account_id as number) : undefined
     };
   }
 }
@@ -686,7 +689,8 @@ class TursoDatabaseOperations implements DatabaseOperations {
       nextPaymentDate: row.next_payment_date ? stringToDate(row.next_payment_date as string) : undefined,
       isPaid: numberToBoolean(row.is_paid as number),
       paymentHistory: row.payment_history ? JSON.parse(row.payment_history as string) : undefined,
-      duration: row.duration || undefined
+      duration: row.duration || undefined,
+      accountId: row.account_id != null ? row.account_id : undefined
     }));
 
     // Exportar balance
@@ -756,8 +760,8 @@ class TursoDatabaseOperations implements DatabaseOperations {
     if (data.expenses) {
       for (const expense of data.expenses) {
         await this.client.execute({
-          sql: `INSERT INTO expenses (amount, category, description, date, frequency, next_payment_date, is_paid, payment_history, duration) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          sql: `INSERT INTO expenses (amount, category, description, date, frequency, next_payment_date, is_paid, payment_history, duration, account_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           args: [
             expense.amount,
             expense.category,
@@ -767,7 +771,8 @@ class TursoDatabaseOperations implements DatabaseOperations {
             expense.nextPaymentDate ? dateToString(expense.nextPaymentDate) : null,
             booleanToNumber(expense.isPaid),
             expense.paymentHistory ? JSON.stringify(expense.paymentHistory) : null,
-            expense.duration || null
+            expense.duration || null,
+            expense.accountId ?? null
           ]
         });
       }

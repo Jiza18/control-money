@@ -17,6 +17,7 @@ import StorageIcon from '@mui/icons-material/Storage';
 import CloudSyncIcon from '@mui/icons-material/CloudSync';
 import TableViewIcon from '@mui/icons-material/TableView';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
+import CreditCardIcon from '@mui/icons-material/CreditCard';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import { validateGoogleSheetsConfig } from '../db/googleSheetsService';
@@ -24,6 +25,7 @@ import { getGoogleSheetsConfig, saveGoogleSheetsConfig } from '../db';
 import DatabaseBackup from './DatabaseBackup';
 import GoogleSheetsSync from './GoogleSheetsSync';
 import BudgetConfig from './BudgetConfig';
+import AccountsConfig from './AccountsConfig';
 import NotificationSettings from './NotificationSettings';
 import AIConfig from './AIConfig';
 import { tokens } from '../theme';
@@ -204,6 +206,29 @@ export default function GoogleSheetsConfig() {
         <Divider />
         <AccordionDetails sx={{ p: 2 }}>
           <BudgetConfig />
+        </AccordionDetails>
+      </Accordion>
+
+      {/* Cuentas / métodos de pago */}
+      <Accordion
+        disableGutters
+        elevation={0}
+        sx={{
+          border: `1px solid ${t.border}`,
+          borderRadius: '16px !important',
+          '&:before': { display: 'none' },
+          overflow: 'hidden',
+        }}
+      >
+        <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={sectionHeaderSx}>
+          <CreditCardIcon sx={{ color: t.primary, fontSize: '1.25rem' }} />
+          <Typography variant="body1" sx={{ fontWeight: 600 }}>
+            Cuentas
+          </Typography>
+        </AccordionSummary>
+        <Divider />
+        <AccordionDetails sx={{ p: 2 }}>
+          <AccountsConfig />
         </AccordionDetails>
       </Accordion>
 

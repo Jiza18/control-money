@@ -17,6 +17,14 @@ export interface Expense {
   isPaid: boolean;
   paymentHistory?: PaymentRecord[];
   duration?: number; // Duración en meses para gastos recurrentes
+  accountId?: number; // Cuenta con la que se paga el gasto (opcional)
+}
+
+export interface Account {
+  id?: number;
+  name: string;
+  color: string; // Color hex para la etiqueta
+  createdAt: Date;
 }
 
 export interface Balance {
@@ -69,7 +77,7 @@ export interface AIConfig {
 }
 
 const DB_NAME = 'expense-tracker';
-const DB_VERSION = 79; // v79: added aiConfig store
+const DB_VERSION = 80; // v80: added accounts store
 
 export interface GoogleSheetsConfig {
   id?: number;
@@ -133,6 +141,11 @@ export type ExpenseDB = {
     key: number;
     value: AIConfig;
     indexes: { 'updatedAt': Date };
+  };
+  accounts: {
+    key: number;
+    value: Account;
+    indexes: { 'name': string; 'createdAt': Date };
   };
 };
 
@@ -207,6 +220,15 @@ function setupAIConfigStore(db: IDBPDatabase<ExpenseDB> | IDBDatabase) {
   if (!db.objectStoreNames.contains('aiConfig')) {
     const store = db.createObjectStore('aiConfig', { keyPath: 'id', autoIncrement: true });
     store.createIndex('updatedAt', 'updatedAt');
+  }
+}
+
+// Store para cuentas (métodos de pago)
+function setupAccountsStore(db: IDBPDatabase<ExpenseDB> | IDBDatabase) {
+  if (!db.objectStoreNames.contains('accounts')) {
+    const store = db.createObjectStore('accounts', { keyPath: 'id', autoIncrement: true });
+    store.createIndex('name', 'name');
+    store.createIndex('createdAt', 'createdAt');
   }
 }
 
@@ -292,6 +314,7 @@ export async function initDB() {
         setupDbConfigStore(db);
         setupBudgetsStore(db);
         setupAIConfigStore(db);
+        setupAccountsStore(db);
       },
     });
 
@@ -299,7 +322,7 @@ export async function initDB() {
     const storeNames = Array.from(db.objectStoreNames);
     console.log(`Stores creados: ${storeNames.join(', ')}`);
 
-    const requiredStores = ['expenses', 'balance', 'sheetConfig', 'savings', 'investments', 'dbConfig', 'budgets', 'aiConfig'];
+    const requiredStores = ['expenses', 'balance', 'sheetConfig', 'savings', 'investments', 'dbConfig', 'budgets', 'aiConfig', 'accounts'];
     if (requiredStores.some((s) => !storeNames.includes(s))) {
       console.warn('Stores faltantes detectados, intentando reiniciar la base de datos...', storeNames);
       // Intento de recuperación: cerrar, eliminar y recrear la BD
@@ -319,6 +342,7 @@ export async function initDB() {
           setupDbConfigStore(db2);
           setupBudgetsStore(db2);
           setupAIConfigStore(db2);
+          setupAccountsStore(db2);
         },
       });
       const recreatedStores = Array.from(recreated.objectStoreNames);

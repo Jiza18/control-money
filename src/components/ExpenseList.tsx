@@ -39,13 +39,15 @@ import {
   CategoryChip,
   FrequencyChip,
   StatusChip,
+  AccountChip,
   EmptyState,
   ConfirmDialog,
   SwipeableCard,
 } from './ui';
 import { tokens } from '../theme';
 import { getAllBudgets } from '../db/budgetServices';
-import { CategoryBudget } from '../db/config';
+import { getAllAccounts } from '../db/accountsService';
+import { CategoryBudget, Account } from '../db/config';
 import { useToast } from '../contexts/ToastContext';
 
 interface ExpenseListProps {
@@ -66,6 +68,7 @@ export default function ExpenseList({
 }: ExpenseListProps) {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [selectedAccount, setSelectedAccount] = useState<number | 'none' | null>(null);
   const [searchText, setSearchText] = useState('');
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' }>({
     key: 'description',
@@ -78,6 +81,10 @@ export default function ExpenseList({
   });
   const [loading, setLoading] = useState(true);
   const [budgets, setBudgets] = useState<CategoryBudget[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const accountsById = new Map<number, Account>(
+    accounts.filter((a): a is Account & { id: number } => a.id != null).map((a) => [a.id, a])
+  );
 
   const toast = useToast();
   const muiTheme = useTheme();
@@ -109,6 +116,15 @@ export default function ExpenseList({
     return { realBalance, projectedBalance };
   };
 
+  const matchesAccountFilter = (expense: Expense) => {
+    if (selectedAccount === null) return true;
+    const bucket =
+      expense.accountId != null && accountsById.has(expense.accountId)
+        ? expense.accountId
+        : 'none';
+    return bucket === selectedAccount;
+  };
+
   const filteredTotal = expenses
     .filter((expense) => {
       const matchesCategory =
@@ -116,7 +132,7 @@ export default function ExpenseList({
       const matchesSearch =
         searchText === '' ||
         expense.description.toLowerCase().includes(searchText.toLowerCase());
-      return matchesCategory && matchesSearch;
+      return matchesCategory && matchesSearch && matchesAccountFilter(expense);
     })
     .reduce((sum, expense) => sum + expense.amount, 0);
 
@@ -150,6 +166,15 @@ export default function ExpenseList({
     }
   }, []);
 
+  const loadAccounts = useCallback(async () => {
+    try {
+      const all = await getAllAccounts();
+      setAccounts(all);
+    } catch (error) {
+      console.error('Error loading accounts:', error);
+    }
+  }, []);
+
   useEffect(() => {
     const handler = () => {
       loadExpenses();
@@ -158,6 +183,12 @@ export default function ExpenseList({
     window.addEventListener('dbTypeChanged', handler as EventListener);
     return () => window.removeEventListener('dbTypeChanged', handler as EventListener);
   }, [loadExpenses, loadBalance]);
+
+  // Al cambiar de mes limpiamos el filtro por cuenta para no quedar
+  // atascados en una cuenta que no tiene gastos en el mes seleccionado.
+  useEffect(() => {
+    setSelectedAccount(null);
+  }, [currentMonth]);
 
   const handleDelete = (id: number) => {
     setConfirmState({ open: true, id });
@@ -212,10 +243,16 @@ export default function ExpenseList({
           expense.frequency === 'one-time' ? newPaymentStatus : expense.isPaid,
         paymentHistory: updatedPaymentHistory,
       };
+      // Actualización optimista en memoria: evita recargar toda la tabla
+      // (que mostraba los skeletons y resultaba molesto) al marcar/desmarcar.
+      setExpenses((prev) =>
+        prev.map((e) => (e.id === expense.id ? { ...e, ...updatedExpense } : e))
+      );
       await updateExpense(updatedExpense);
-      await loadExpenses();
     } catch (error) {
       console.error('Error updating expense payment status:', error);
+      // Si falla la persistencia, recargamos para revertir el cambio optimista
+      await loadExpenses();
     }
   };
 
@@ -224,6 +261,7 @@ export default function ExpenseList({
       await loadExpenses();
       await loadBalance();
       await loadBudgets();
+      await loadAccounts();
     };
     updateData();
 
@@ -235,7 +273,7 @@ export default function ExpenseList({
     return () => {
       document.removeEventListener('expenseAdded', handleExpenseChange);
     };
-  }, [currentMonth, loadExpenses, loadBalance, loadBudgets]);
+  }, [currentMonth, loadExpenses, loadBalance, loadBudgets, loadAccounts]);
 
   // Computed values for summary cards
   const totalMonth = expenses.reduce((sum, e) => sum + e.amount, 0);
@@ -255,7 +293,7 @@ export default function ExpenseList({
       const matchesSearch =
         searchText === '' ||
         expense.description.toLowerCase().includes(searchText.toLowerCase());
-      return matchesCategory && matchesSearch;
+      return matchesCategory && matchesSearch && matchesAccountFilter(expense);
     })
     .sort((a, b) => {
       const currentMonthPaymentA = a.paymentHistory?.find((record) =>
@@ -287,6 +325,42 @@ export default function ExpenseList({
     });
 
   const categories = Array.from(new Set(expenses.map((e) => e.category)));
+
+  // Gasto agrupado por cuenta para el mes actual (incluye bucket "Sin cuenta")
+  const accountBuckets = (() => {
+    type Agg = { total: number; paid: number };
+    const totals = new Map<number | 'none', Agg>();
+    let hasNone = false;
+    for (const e of expenses) {
+      const key =
+        e.accountId != null && accountsById.has(e.accountId) ? e.accountId : 'none';
+      if (key === 'none') hasNone = true;
+      const ph = e.paymentHistory?.find((record) =>
+        isSameMonth(new Date(record.date), currentMonth)
+      );
+      const agg = totals.get(key) || { total: 0, paid: 0 };
+      agg.total += e.amount;
+      if (ph?.isPaid) agg.paid += e.amount;
+      totals.set(key, agg);
+    }
+    const toBucket = (
+      key: number | 'none',
+      name: string,
+      color: string,
+      agg: Agg
+    ) => ({ key, name, color, total: agg.total, paid: agg.paid, pending: agg.total - agg.paid });
+
+    const buckets: ReturnType<typeof toBucket>[] = [];
+    for (const acc of accounts) {
+      if (acc.id != null && totals.has(acc.id)) {
+        buckets.push(toBucket(acc.id, acc.name, acc.color, totals.get(acc.id)!));
+      }
+    }
+    if (hasNone) {
+      buckets.push(toBucket('none', 'Sin cuenta', '#94A3B8', totals.get('none')!));
+    }
+    return buckets;
+  })();
 
   return (
     <Box data-testid="expense-list">
@@ -338,6 +412,86 @@ export default function ExpenseList({
           </Box>
         ))}
       </Box>
+
+      {/* Gasto por cuenta (clic para filtrar) */}
+      {accounts.length > 0 && accountBuckets.length > 0 && (
+        <Box sx={{ mb: 2 }}>
+          <Typography
+            variant="caption"
+            sx={{ color: t.textSecondary, fontWeight: 700, display: 'block', mb: 0.75 }}
+          >
+            Por cuenta
+          </Typography>
+          <Box
+            sx={{
+              display: 'flex',
+              gap: 1,
+              overflowX: 'auto',
+              pb: 0.5,
+              WebkitOverflowScrolling: 'touch',
+              '& > *': { flex: '0 0 auto' },
+            }}
+          >
+            {accountBuckets.map((b) => {
+              const isSelected = selectedAccount === b.key;
+              return (
+                <Box
+                  key={String(b.key)}
+                  onClick={() => setSelectedAccount(isSelected ? null : b.key)}
+                  sx={{
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 0.25,
+                    px: 1.25,
+                    py: 0.75,
+                    minWidth: 96,
+                    borderRadius: '12px',
+                    border: `1px solid ${isSelected ? b.color : t.border}`,
+                    backgroundColor: isSelected ? `${b.color}1F` : t.surface,
+                    transition: 'border-color 0.15s, background-color 0.15s',
+                  }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    <Box
+                      sx={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: '50%',
+                        backgroundColor: b.color,
+                        flexShrink: 0,
+                      }}
+                    />
+                    <Typography
+                      variant="caption"
+                      sx={{ fontWeight: 600, color: t.textPrimary, whiteSpace: 'nowrap' }}
+                    >
+                      {b.name}
+                    </Typography>
+                  </Box>
+                  <Typography variant="body2" sx={{ fontWeight: 700, color: t.textPrimary }}>
+                    {formatCurrency(b.total)}
+                  </Typography>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', mt: 0.25 }}>
+                    <Typography
+                      variant="caption"
+                      sx={{ color: t.success, fontWeight: 600, fontSize: '0.65rem', whiteSpace: 'nowrap', lineHeight: 1.4 }}
+                    >
+                      Pagado {formatCurrency(b.paid)}
+                    </Typography>
+                    <Typography
+                      variant="caption"
+                      sx={{ color: t.danger, fontWeight: 600, fontSize: '0.65rem', whiteSpace: 'nowrap', lineHeight: 1.4 }}
+                    >
+                      Pend. {formatCurrency(b.pending)}
+                    </Typography>
+                  </Box>
+                </Box>
+              );
+            })}
+          </Box>
+        </Box>
+      )}
 
       {/* Search and filter */}
       <Box sx={{ mb: 2 }}>
@@ -433,7 +587,7 @@ export default function ExpenseList({
           })}
         </Box>
 
-        {searchText && (
+        {(searchText || selectedAccount !== null) && (
           <Typography variant="caption" sx={{ color: t.textSecondary, mt: 0.5, display: 'block' }}>
             Filtrado: {formatCurrency(filteredTotal)}
           </Typography>
@@ -505,6 +659,12 @@ export default function ExpenseList({
                       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mb: 1 }}>
                         <CategoryChip category={expense.category} />
                         <FrequencyChip frequency={expense.frequency} />
+                        {expense.accountId != null && accountsById.get(expense.accountId) && (
+                          <AccountChip
+                            name={accountsById.get(expense.accountId)!.name}
+                            color={accountsById.get(expense.accountId)!.color}
+                          />
+                        )}
                         <Chip
                           size="small"
                           label={format(new Date(expense.date), 'dd/MM/yyyy')}
@@ -734,7 +894,15 @@ export default function ExpenseList({
                         </Box>
                       </TableCell>
                       <TableCell>
-                        <CategoryChip category={expense.category} />
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, alignItems: 'flex-start' }}>
+                          <CategoryChip category={expense.category} />
+                          {expense.accountId != null && accountsById.get(expense.accountId) && (
+                            <AccountChip
+                              name={accountsById.get(expense.accountId)!.name}
+                              color={accountsById.get(expense.accountId)!.color}
+                            />
+                          )}
+                        </Box>
                       </TableCell>
                       <TableCell sx={{ color: t.textSecondary, fontSize: '0.85rem' }}>
                         {format(new Date(expense.date), 'dd/MM/yyyy')}
