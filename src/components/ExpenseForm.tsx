@@ -281,7 +281,7 @@ export default function ExpenseForm({
             <FormControl fullWidth>
               <InputLabel>Cuenta</InputLabel>
               <Select
-                value={expense.accountId ?? ''}
+                value={expense.accountId != null ? String(expense.accountId) : ''}
                 label="Cuenta"
                 onChange={(e) =>
                   setExpense({
@@ -291,8 +291,8 @@ export default function ExpenseForm({
                   })
                 }
                 renderValue={(value) => {
-                  if (value === '' || value == null) return 'Sin cuenta';
-                  const acc = accounts.find((a) => a.id === value);
+                  if (!value) return 'Sin cuenta';
+                  const acc = accounts.find((a) => String(a.id) === value);
                   return acc ? (
                     <AccountChip name={acc.name} color={acc.color} />
                   ) : (
@@ -305,7 +305,7 @@ export default function ExpenseForm({
                   <em>Sin cuenta</em>
                 </MenuItem>
                 {accounts.map((account) => (
-                  <MenuItem key={account.id} value={account.id}>
+                  <MenuItem key={account.id} value={String(account.id)}>
                     <AccountChip name={account.name} color={account.color} />
                   </MenuItem>
                 ))}

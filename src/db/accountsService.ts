@@ -14,7 +14,7 @@ export async function getAccountById(id: number): Promise<Account | undefined> {
 
 export async function addAccount(account: Omit<Account, 'id'>): Promise<number> {
   const db = await getDB();
-  return db.add('accounts', account as Account);
+  return db.add('accounts', account as Account) as Promise<number>;
 }
 
 export async function updateAccount(account: Account): Promise<void> {
