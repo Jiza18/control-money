@@ -195,12 +195,14 @@ function AppInner({ theme, toggleTheme }: { theme: 'light' | 'dark'; toggleTheme
           py: 2,
           borderTop: `1px solid ${t.border}`,
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
+          flexDirection: 'column',
+          gap: 1.5,
         }}
       >
-        <DatabaseIndicator />
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+        <Box sx={{ minWidth: 0, overflowX: 'hidden' }}>
+          <DatabaseIndicator />
+        </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.5 }}>
           <IconButton size="small" onClick={togglePrivacy} sx={{ color: t.textSecondary }}>
             {privacyMode ? <VisibilityOffIcon /> : <VisibilityIcon />}
           </IconButton>
@@ -232,6 +234,7 @@ function AppInner({ theme, toggleTheme }: { theme: 'light' | 'dark'; toggleTheme
             position: 'sticky',
             top: 0,
             overflowY: 'auto',
+            overflowX: 'hidden',
           }}
         >
           {sidebarContent}
