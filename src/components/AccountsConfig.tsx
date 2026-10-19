@@ -47,6 +47,10 @@ export default function AccountsConfig() {
 
   useEffect(() => {
     loadAccounts();
+    // Las cuentas viven en la BD activa: recargar al cambiar entre local y nube
+    const handler = () => loadAccounts();
+    window.addEventListener('dbTypeChanged', handler);
+    return () => window.removeEventListener('dbTypeChanged', handler);
   }, []);
 
   const loadAccounts = async () => {

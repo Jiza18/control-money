@@ -91,6 +91,15 @@ CREATE TABLE IF NOT EXISTS investments (
   updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Tabla de cuentas (con qué se paga cada gasto, expenses.account_id apunta aquí)
+CREATE TABLE IF NOT EXISTS accounts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  color TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Tabla de configuración de Google Sheets
 CREATE TABLE IF NOT EXISTS google_sheets_config (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -162,7 +171,7 @@ export async function initializeTursoDatabase(client: Client): Promise<void> {
     }
 
     // Inicializar metadatos de sincronización
-    const tables = ['expenses', 'balance', 'savings_goals', 'investments', 'google_sheets_config'];
+    const tables = ['expenses', 'balance', 'savings_goals', 'investments', 'accounts', 'google_sheets_config'];
     
     for (const table of tables) {
       await client.execute({

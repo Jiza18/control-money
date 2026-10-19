@@ -5,6 +5,7 @@ import {
   SavingsRepository, 
   InvestmentRepository, 
   GoogleSheetsRepository,
+  AccountRepository,
   DatabaseOperations 
 } from './interfaces';
 import { 
@@ -13,6 +14,7 @@ import {
   SavingsGoal, 
   Investment, 
   GoogleSheetsConfig, 
+  Account,
   getDB 
 } from '../config';
 import { 
@@ -292,6 +294,41 @@ class IndexedDbGoogleSheetsRepository implements GoogleSheetsRepository {
   }
 }
 
+class IndexedDbAccountRepository implements AccountRepository {
+  async create(account: Omit<Account, 'id'>): Promise<Account> {
+    const db = await getDB();
+    const id = await db.add('accounts', account as Account);
+    return { ...account, id } as Account;
+  }
+
+  async update(account: Account): Promise<Account> {
+    const db = await getDB();
+    await db.put('accounts', account);
+    return account;
+  }
+
+  async delete(id: number): Promise<boolean> {
+    try {
+      const db = await getDB();
+      await db.delete('accounts', id);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async findById(id: number): Promise<Account | undefined> {
+    const db = await getDB();
+    return await db.get('accounts', id);
+  }
+
+  async findAll(): Promise<Account[]> {
+    const db = await getDB();
+    const all = await db.getAll('accounts');
+    return all.sort((a, b) => a.name.localeCompare(b.name));
+  }
+}
+
 class IndexedDbDatabaseOperations implements DatabaseOperations {
   async exportData(): Promise<Record<string, any[]>> {
     return await exportDatabase();
@@ -306,6 +343,7 @@ class IndexedDbDatabaseOperations implements DatabaseOperations {
     await clearStore('balance');
     await clearStore('savings');
     await clearStore('investments');
+    await clearStore('accounts');
     await clearStore('sheetConfig');
   }
 
@@ -335,6 +373,7 @@ export class IndexedDbRepository implements DatabaseRepository {
   public balance: BalanceRepository;
   public savings: SavingsRepository;
   public investments: InvestmentRepository;
+  public accounts: AccountRepository;
   public googleSheets: GoogleSheetsRepository;
   public operations: DatabaseOperations;
 
@@ -343,6 +382,7 @@ export class IndexedDbRepository implements DatabaseRepository {
     this.balance = new IndexedDbBalanceRepository();
     this.savings = new IndexedDbSavingsRepository();
     this.investments = new IndexedDbInvestmentRepository();
+    this.accounts = new IndexedDbAccountRepository();
     this.googleSheets = new IndexedDbGoogleSheetsRepository();
     this.operations = new IndexedDbDatabaseOperations();
   }

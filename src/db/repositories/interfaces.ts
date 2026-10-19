@@ -1,4 +1,4 @@
-import { Expense, Balance, SavingsGoal, Investment, GoogleSheetsConfig } from '../config';
+import { Expense, Balance, SavingsGoal, Investment, GoogleSheetsConfig, Account } from '../config';
 
 // Interfaz base para operaciones CRUD
 export interface BaseRepository<T, K = number> {
@@ -36,6 +36,8 @@ export interface InvestmentRepository extends BaseRepository<Investment> {
   updateAllCurrentValues(): Promise<void>;
 }
 
+export type AccountRepository = BaseRepository<Account>;
+
 export interface GoogleSheetsRepository extends BaseRepository<GoogleSheetsConfig> {
   findByLastSync(): Promise<GoogleSheetsConfig[]>;
   updateTokens(id: number, accessToken: string, refreshToken: string, expiry: Date): Promise<GoogleSheetsConfig>;
@@ -56,6 +58,7 @@ export interface DatabaseRepository {
   balance: BalanceRepository;
   savings: SavingsRepository;
   investments: InvestmentRepository;
+  accounts: AccountRepository;
   googleSheets: GoogleSheetsRepository;
   operations: DatabaseOperations;
   

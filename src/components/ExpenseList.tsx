@@ -231,10 +231,11 @@ export default function ExpenseList({
     const handler = () => {
       loadExpenses();
       loadBalance();
+      loadAccounts();
     };
     window.addEventListener('dbTypeChanged', handler as EventListener);
     return () => window.removeEventListener('dbTypeChanged', handler as EventListener);
-  }, [loadExpenses, loadBalance]);
+  }, [loadExpenses, loadBalance, loadAccounts]);
 
   // Al cambiar de mes limpiamos el filtro por cuenta para no quedar
   // atascados en una cuenta que no tiene gastos en el mes seleccionado.

@@ -6,6 +6,7 @@ import {
   SavingsRepository, 
   InvestmentRepository, 
   GoogleSheetsRepository,
+  AccountRepository,
   DatabaseOperations 
 } from './interfaces';
 import { 
@@ -14,7 +15,8 @@ import {
   SavingsGoal, 
   Investment, 
   GoogleSheetsConfig,
-  PaymentRecord
+  PaymentRecord,
+  Account
 } from '../config';
 import { 
   dateToString, 
@@ -564,6 +566,70 @@ class TursoInvestmentRepository implements InvestmentRepository {
   }
 }
 
+class TursoAccountRepository implements AccountRepository {
+  private client: Client;
+
+  constructor(client: Client) {
+    this.client = client;
+  }
+
+  async create(account: Omit<Account, 'id'>): Promise<Account> {
+    const result = await this.client.execute({
+      sql: 'INSERT INTO accounts (name, color, created_at) VALUES (?, ?, ?) RETURNING *',
+      args: [account.name, account.color, dateToString(account.createdAt)]
+    });
+
+    return this.mapRowToAccount(result.rows[0]);
+  }
+
+  async update(account: Account): Promise<Account> {
+    await this.client.execute({
+      sql: 'UPDATE accounts SET name = ?, color = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      args: [account.name, account.color, account.id!]
+    });
+
+    return account;
+  }
+
+  async delete(id: number): Promise<boolean> {
+    try {
+      await this.client.execute({
+        sql: 'DELETE FROM accounts WHERE id = ?',
+        args: [id]
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async findById(id: number): Promise<Account | undefined> {
+    const result = await this.client.execute({
+      sql: 'SELECT * FROM accounts WHERE id = ?',
+      args: [id]
+    });
+
+    return result.rows[0] ? this.mapRowToAccount(result.rows[0]) : undefined;
+  }
+
+  async findAll(): Promise<Account[]> {
+    const result = await this.client.execute('SELECT * FROM accounts');
+    // Mismo orden que en local (localeCompare respeta acentos y mayúsculas)
+    return result.rows
+      .map(row => this.mapRowToAccount(row))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  private mapRowToAccount(row: any): Account {
+    return {
+      id: row.id as number,
+      name: row.name as string,
+      color: row.color as string,
+      createdAt: stringToDate(row.created_at as string)
+    };
+  }
+}
+
 class TursoGoogleSheetsRepository implements GoogleSheetsRepository {
   private client: Client;
 
@@ -735,6 +801,15 @@ class TursoDatabaseOperations implements DatabaseOperations {
       notes: row.notes || undefined
     }));
 
+    // Exportar accounts
+    const accountsResult = await this.client.execute('SELECT * FROM accounts');
+    data.accounts = accountsResult.rows.map(row => ({
+      id: row.id,
+      name: row.name,
+      color: row.color,
+      createdAt: stringToDate(row.created_at as string)
+    }));
+
     // Exportar Google Sheets config
     const sheetsResult = await this.client.execute('SELECT * FROM google_sheets_config');
     data.sheetConfig = sheetsResult.rows.map(row => ({
@@ -838,6 +913,21 @@ class TursoDatabaseOperations implements DatabaseOperations {
       }
     }
 
+    // Importar accounts conservando el id: expenses.account_id apunta a él
+    if (data.accounts) {
+      for (const account of data.accounts) {
+        await this.client.execute({
+          sql: 'INSERT INTO accounts (id, name, color, created_at) VALUES (?, ?, ?, ?)',
+          args: [
+            account.id ?? null,
+            account.name,
+            account.color,
+            dateToString(account.createdAt ?? new Date())
+          ]
+        });
+      }
+    }
+
     // Importar Google Sheets config
     if (data.sheetConfig) {
       for (const config of data.sheetConfig) {
@@ -864,6 +954,7 @@ class TursoDatabaseOperations implements DatabaseOperations {
     await this.client.execute('DELETE FROM balance');
     await this.client.execute('DELETE FROM savings_goals');
     await this.client.execute('DELETE FROM investments');
+    await this.client.execute('DELETE FROM accounts');
     await this.client.execute('DELETE FROM google_sheets_config');
   }
 
@@ -893,6 +984,7 @@ export class TursoRepository implements DatabaseRepository {
   public balance: BalanceRepository;
   public savings: SavingsRepository;
   public investments: InvestmentRepository;
+  public accounts: AccountRepository;
   public googleSheets: GoogleSheetsRepository;
   public operations: DatabaseOperations;
 
@@ -901,6 +993,7 @@ export class TursoRepository implements DatabaseRepository {
     this.balance = new TursoBalanceRepository(client);
     this.savings = new TursoSavingsRepository(client);
     this.investments = new TursoInvestmentRepository(client);
+    this.accounts = new TursoAccountRepository(client);
     this.googleSheets = new TursoGoogleSheetsRepository(client);
     this.operations = new TursoDatabaseOperations(client);
   }

@@ -1,8 +1,9 @@
 import { DatabaseRepository, RepositoryFactory, DatabaseConfig } from './interfaces';
 import { IndexedDbRepository } from './indexedDbRepository';
 import { TursoRepository } from './tursoRepository';
-import { initTursoClient, initializeTursoDatabase } from '../tursoConfig';
-import { initDB } from '../config';
+import { initTursoClient, initializeTursoDatabase, dateToString } from '../tursoConfig';
+import { initDB, getDB } from '../config';
+import type { Client } from '@libsql/client';
 import { getCloudDbConfig, isCloudDbConfigValid } from '../cloudDbConfig';
 
 export class DatabaseRepositoryFactory implements RepositoryFactory {
@@ -18,12 +19,47 @@ export class DatabaseRepositoryFactory implements RepositoryFactory {
         }
         
         const client = initTursoClient(config.turso);
+        const hadAccountsTable = await tursoTableExists(client, 'accounts');
         await initializeTursoDatabase(client);
+        if (!hadAccountsTable) {
+          await seedTursoAccountsFromLocal(client);
+        }
         return new TursoRepository(client);
       
       default:
         throw new Error(`Unsupported database type: ${config.type}`);
     }
+  }
+}
+
+async function tursoTableExists(client: Client, table: string): Promise<boolean> {
+  const result = await client.execute({
+    sql: "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+    args: [table]
+  });
+  return result.rows.length > 0;
+}
+
+// Antes las cuentas solo vivían en IndexedDB. La primera vez que se crea la tabla en Turso se suben
+// las locales con su mismo id, para que los gastos que ya apuntan a ellas (account_id) sigan enlazados.
+async function seedTursoAccountsFromLocal(client: Client): Promise<void> {
+  try {
+    const db = await getDB();
+    const localAccounts = db.objectStoreNames.contains('accounts') ? await db.getAll('accounts') : [];
+    db.close();
+
+    for (const account of localAccounts) {
+      await client.execute({
+        sql: 'INSERT OR IGNORE INTO accounts (id, name, color, created_at) VALUES (?, ?, ?, ?)',
+        args: [account.id ?? null, account.name, account.color, dateToString(account.createdAt ?? new Date())]
+      });
+    }
+    if (localAccounts.length > 0) {
+      console.log(`Cuentas locales subidas a Turso: ${localAccounts.length}`);
+    }
+  } catch (error) {
+    // No bloquea el arranque con Turso: las cuentas se pueden recrear o sincronizar después
+    console.warn('No se pudieron subir las cuentas locales a Turso:', error);
   }
 }
 
