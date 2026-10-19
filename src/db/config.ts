@@ -1,4 +1,4 @@
-import { openDB, IDBPDatabase } from 'idb';
+import { openDB, IDBPDatabase, OpenDBCallbacks, StoreNames } from 'idb';
 
 export interface PaymentRecord {
   date: Date;
@@ -297,63 +297,80 @@ export async function deleteDatabase(): Promise<boolean> {
   });
 }
 
+const REQUIRED_STORES: StoreNames<ExpenseDB>[] = [
+  'expenses', 'balance', 'sheetConfig', 'savings', 'investments', 'dbConfig', 'budgets', 'aiConfig', 'accounts',
+];
+
+// Versión con la que se abre la BD. Parte de DB_VERSION, pero queda por encima
+// si initDB() ha tenido que subirla para crear stores que faltaban.
+let dbVersion = DB_VERSION;
+
+function setupAllStores(db: IDBPDatabase<ExpenseDB>) {
+  setupExpensesStore(db);
+  setupBalanceStore(db);
+  setupSheetConfigStore(db);
+  setupSavingsStore(db);
+  setupInvestmentsStore(db);
+  setupDbConfigStore(db);
+  setupBudgetsStore(db);
+  setupAIConfigStore(db);
+  setupAccountsStore(db);
+}
+
+function getMissingStores(db: IDBPDatabase<ExpenseDB>) {
+  return REQUIRED_STORES.filter((s) => !db.objectStoreNames.contains(s));
+}
+
+// Abre la BD en `version`, creando los stores que falten si hay upgrade. Si la BD ya está
+// en una versión superior, la abre en la que tenga. La conexión se cierra sola cuando un
+// upgrade o un borrado la necesitan, para no dejarlos bloqueados.
+async function openExpenseDB(version: number): Promise<IDBPDatabase<ExpenseDB>> {
+  let db: IDBPDatabase<ExpenseDB> | undefined;
+  const callbacks: OpenDBCallbacks<ExpenseDB> = {
+    upgrade(database, oldVersion, newVersion) {
+      console.log(`Upgrading database from version ${oldVersion} to ${newVersion}`);
+      setupAllStores(database);
+    },
+    blocked() {
+      console.warn(`La apertura de ${DB_NAME} está esperando a que se cierre otra conexión (¿otra pestaña abierta?)`);
+    },
+    blocking() {
+      db?.close();
+    },
+  };
+
+  try {
+    db = await openDB<ExpenseDB>(DB_NAME, version, callbacks);
+  } catch (error) {
+    if ((error as DOMException)?.name !== 'VersionError') throw error;
+    db = await openDB<ExpenseDB>(DB_NAME, undefined, callbacks);
+  }
+  dbVersion = Math.max(dbVersion, db.version);
+  return db;
+}
+
 export async function initDB() {
   try {
-    console.log(`Iniciando apertura de base de datos ${DB_NAME} versión ${DB_VERSION}`);
-    
-    const db = await openDB<ExpenseDB>(DB_NAME, DB_VERSION, {
-      upgrade(db, oldVersion: number, newVersion: number | null) {
-        console.log(`Upgrading database from version ${oldVersion} to ${newVersion}`);
-        
-        // Configuración de stores
-        setupExpensesStore(db);
-        setupBalanceStore(db);
-        setupSheetConfigStore(db);
-        setupSavingsStore(db);
-        setupInvestmentsStore(db);
-        setupDbConfigStore(db);
-        setupBudgetsStore(db);
-        setupAIConfigStore(db);
-        setupAccountsStore(db);
-      },
-    });
+    console.log(`Iniciando apertura de base de datos ${DB_NAME} versión ${dbVersion}`);
 
-    // Verificar que los stores se hayan creado correctamente
-    const storeNames = Array.from(db.objectStoreNames);
-    console.log(`Stores creados: ${storeNames.join(', ')}`);
+    let db = await openExpenseDB(dbVersion);
 
-    const requiredStores = ['expenses', 'balance', 'sheetConfig', 'savings', 'investments', 'dbConfig', 'budgets', 'aiConfig', 'accounts'];
-    if (requiredStores.some((s) => !storeNames.includes(s))) {
-      console.warn('Stores faltantes detectados, intentando reiniciar la base de datos...', storeNames);
-      // Intento de recuperación: cerrar, eliminar y recrear la BD
-      try {
-        db.close();
-      } catch {}
-      await deleteDatabase();
-      await new Promise(resolve => setTimeout(resolve, 300));
-      const recreated = await openDB<ExpenseDB>(DB_NAME, DB_VERSION, {
-        upgrade(db2, oldVersion: number, newVersion: number | null) {
-          console.log(`Recreating database from version ${oldVersion} to ${newVersion}`);
-          setupExpensesStore(db2);
-          setupBalanceStore(db2);
-          setupSheetConfigStore(db2);
-          setupSavingsStore(db2);
-          setupInvestmentsStore(db2);
-          setupDbConfigStore(db2);
-          setupBudgetsStore(db2);
-          setupAIConfigStore(db2);
-          setupAccountsStore(db2);
-        },
-      });
-      const recreatedStores = Array.from(recreated.objectStoreNames);
-      console.log('Stores después de recreación:', recreatedStores);
-      if (requiredStores.some((s) => !recreatedStores.includes(s))) {
-        console.error('No se pudieron crear todos los stores necesarios tras la recreación. Stores existentes:', recreatedStores);
-        throw new Error('Faltan stores en la base de datos tras recreación');
+    const missing = getMissingStores(db);
+    if (missing.length > 0) {
+      // Los stores solo se pueden crear dentro de un upgrade: se sube una versión y
+      // upgrade() crea únicamente los que faltan. Los datos existentes no se tocan.
+      console.warn(`Stores faltantes (${missing.join(', ')}), creándolos sin borrar datos...`);
+      const nextVersion = db.version + 1;
+      db.close();
+      db = await openExpenseDB(nextVersion);
+
+      const stillMissing = getMissingStores(db);
+      if (stillMissing.length > 0) {
+        throw new Error(`No se pudieron crear los stores: ${stillMissing.join(', ')}`);
       }
-      return recreated;
     }
 
+    console.log(`Stores disponibles: ${Array.from(db.objectStoreNames).join(', ')}`);
     return db;
   } catch (error) {
     console.error('Error al inicializar la base de datos:', error);
@@ -362,7 +379,7 @@ export async function initDB() {
 }
 
 export async function getDB(): Promise<IDBPDatabase<ExpenseDB>> {
-  return openDB<ExpenseDB>(DB_NAME, DB_VERSION);
+  return openExpenseDB(dbVersion);
 }
 
 export async function createGoogleSheetsConfig(): Promise<IDBPDatabase<ExpenseDB>> {
