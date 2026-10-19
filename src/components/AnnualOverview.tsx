@@ -1,8 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Box,
-  Chip,
-  Paper,
   Table,
   TableBody,
   TableCell,
@@ -14,12 +12,14 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
-  Card,
-  CardContent,
-  Grid,
+  ButtonBase,
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
+import TaskAltRoundedIcon from '@mui/icons-material/TaskAltRounded';
+import AccountBalanceWalletOutlinedIcon from '@mui/icons-material/AccountBalanceWalletOutlined';
+import AccountBalanceOutlinedIcon from '@mui/icons-material/AccountBalanceOutlined';
 import {
   BarChart,
   Bar,
@@ -27,7 +27,6 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip as RechartsTooltip,
-  Legend,
   ResponsiveContainer,
 } from 'recharts';
 import { format, startOfYear, eachMonthOfInterval, endOfYear, isSameMonth } from 'date-fns';
@@ -35,6 +34,10 @@ import { es } from 'date-fns/locale';
 import { Expense } from '../db/config';
 // Usar adaptador de repositorio para respetar la BD activa
 import { getExpensesByMonth, getCurrentBalance } from '../db';
+import { tokens, getCategoryColor } from '../theme';
+import { formatCurrency, formatCurrencyCompact } from '../utils/formatters';
+import { SectionCard, SummaryCard } from './ui';
+import { usePrivacy } from '../contexts/PrivacyContext';
 
 interface MonthlyExpenses {
   [key: string]: {
@@ -140,13 +143,6 @@ export default function AnnualOverview() {
 
   
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-ES', {
-      style: 'currency',
-      currency: 'EUR'
-    }).format(amount);
-  };
-
   const handleMonthToggle = (monthKey: string) => {
     setSelectedMonths(prev =>
       prev.includes(monthKey)
@@ -177,361 +173,424 @@ export default function AnnualOverview() {
   });
 
   const hasChartData = chartData.some((d) => d.total > 0);
-  const isDark = muiTheme.palette.mode === 'dark';
-  const gridColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
-  const textColor = isDark ? '#9ca3af' : '#6b7280';
+  const mode = muiTheme.palette.mode;
+  const t = tokens[mode];
+  const { privacyMode } = usePrivacy();
+  const money = (amount: number) => (privacyMode ? '•••••' : formatCurrency(amount));
+
+  // Balance real del mes (misma regla que antes: 0 si todo está pagado)
+  const getRealBalance = (month: Date) => {
+    const monthKey = format(month, 'yyyy-MM');
+    const monthExpenses = monthlyExpenses[monthKey] || { total: 0, totalPaid: 0 };
+    if (monthExpenses.total === monthExpenses.totalPaid) return 0;
+    const pendingExpenses = monthExpenses.total - monthExpenses.totalPaid;
+    return balance?.amount
+      ? (isSameMonth(month, new Date()) ? balance.amount - pendingExpenses : balance.monthlyIncome - pendingExpenses)
+      : 0;
+  };
+
+  const getProjectedBalance = (monthKey: string) => {
+    const monthExpenses = monthlyExpenses[monthKey] || { total: 0 };
+    return balance?.monthlyIncome ? balance.monthlyIncome - monthExpenses.total : 0;
+  };
+
+  const selectedTotalPaid = selectedMonths.reduce(
+    (acc, monthKey) => acc + (monthlyExpenses[monthKey]?.totalPaid || 0),
+    0
+  );
+  const selectedProjected = selectedMonths.reduce((acc, monthKey) => acc + getProjectedBalance(monthKey), 0);
+  const selectedRealBalance = selectedMonths.reduce((acc, monthKey) => {
+    const month = months.find((m) => format(m, 'yyyy-MM') === monthKey);
+    return month ? acc + getRealBalance(month) : acc;
+  }, 0);
+
+  const seriesColors = { total: t.primary, pagado: t.success };
+  const monthLabel = (month: Date) => format(month, 'MMM', { locale: es }).replace('.', '');
+
+  // Celda de importe: tabular, a la derecha, ceros atenuados
+  const amountCellSx = (amount: number, selected: boolean, tone?: 'balance') => ({
+    textAlign: 'right' as const,
+    whiteSpace: 'nowrap' as const,
+    fontVariantNumeric: 'tabular-nums',
+    opacity: selected ? 1 : 0.35,
+    transition: 'opacity 0.2s ease',
+    color:
+      tone === 'balance'
+        ? amount === 0
+          ? t.textMuted
+          : amount > 0
+            ? t.success
+            : t.danger
+        : amount === 0
+          ? t.textMuted
+          : 'inherit',
+  });
+
+  const stickyFirstCell = (bg: string) => ({
+    position: 'sticky' as const,
+    left: 0,
+    zIndex: 2,
+    backgroundColor: bg,
+    whiteSpace: 'nowrap' as const,
+    borderRight: `1px solid ${t.border}`,
+    minWidth: 180,
+  });
+
+  const totalsRowSx = {
+    '& > td, & > th': { backgroundColor: t.surfaceSoft },
+  };
+
+  const CategoryLabel = ({ category }: { category: string }) => (
+    <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
+      <Box
+        component="span"
+        sx={{ width: 8, height: 8, borderRadius: '3px', backgroundColor: getCategoryColor(category, mode), flexShrink: 0 }}
+      />
+      {category}
+    </Box>
+  );
+
+  const ChartTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null;
+    return (
+      <Box
+        sx={{
+          backgroundColor: t.surface,
+          border: `1px solid ${t.border}`,
+          borderRadius: '10px',
+          boxShadow: t.shadowLg,
+          px: 1.5,
+          py: 1.25,
+          minWidth: 160,
+        }}
+      >
+        <Typography variant="caption" sx={{ color: t.textMuted, fontWeight: 600, textTransform: 'capitalize' }}>
+          {label} {format(currentYear, 'yyyy')}
+        </Typography>
+        {payload.map((p: any) => (
+          <Box key={p.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
+            <Box sx={{ width: 8, height: 8, borderRadius: '2px', backgroundColor: p.color }} />
+            <Typography variant="body2" sx={{ color: t.textSecondary, flex: 1 }}>
+              {p.dataKey === 'total' ? 'Total' : 'Pagado'}
+            </Typography>
+            <Typography variant="body2" sx={{ fontWeight: 600, color: t.textPrimary, fontVariantNumeric: 'tabular-nums' }}>
+              {money(Number(p.value))}
+            </Typography>
+          </Box>
+        ))}
+      </Box>
+    );
+  };
+
+  const legend = (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+      {(['total', 'pagado'] as const).map((key) => (
+        <Box key={key} sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+          <Box sx={{ width: 10, height: 10, borderRadius: '3px', backgroundColor: seriesColors[key] }} />
+          <Typography variant="caption" sx={{ color: t.textSecondary, fontWeight: 500 }}>
+            {key === 'total' ? 'Total' : 'Pagado'}
+          </Typography>
+        </Box>
+      ))}
+    </Box>
+  );
 
   return (
-    <Box sx={{ mt: 4 }}>
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="h5" gutterBottom>
-          Resumen Anual {format(currentYear, 'yyyy')}
-        </Typography>
-        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
-          {months.map(month => {
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 2, md: 2.5 }, minWidth: 0 }}>
+      {/* Selector de meses */}
+      <SectionCard
+        title={`Resumen anual ${format(currentYear, 'yyyy')}`}
+        subtitle={`${selectedMonths.length} de ${months.length} meses incluidos · toca un mes para excluirlo`}
+      >
+        <Box
+          role="group"
+          aria-label="Meses incluidos"
+          sx={{
+            display: 'flex',
+            gap: 0.75,
+            overflowX: 'auto',
+            mx: { xs: -2, sm: 0 },
+            px: { xs: 2, sm: 0 },
+            pb: 0.25,
+            flexWrap: { xs: 'nowrap', md: 'wrap' },
+            scrollbarWidth: 'none',
+            '&::-webkit-scrollbar': { display: 'none' },
+          }}
+        >
+          {months.map((month) => {
             const monthKey = format(month, 'yyyy-MM');
+            const selected = selectedMonths.includes(monthKey);
             return (
-              <Chip
+              <ButtonBase
                 key={month.toString()}
-                label={format(month, 'MMM', { locale: es })}
                 onClick={() => handleMonthToggle(monthKey)}
-                color={selectedMonths.includes(monthKey) ? 'primary' : 'default'}
-                variant={selectedMonths.includes(monthKey) ? 'filled' : 'outlined'}
-                sx={{ cursor: 'pointer' }}
-              />
+                aria-pressed={selected}
+                sx={{
+                  flexShrink: 0,
+                  minWidth: 52,
+                  height: 34,
+                  px: 1.5,
+                  borderRadius: '9px',
+                  fontSize: '0.8125rem',
+                  fontWeight: 600,
+                  textTransform: 'capitalize',
+                  border: `1px solid ${selected ? t.primary : t.border}`,
+                  backgroundColor: selected ? t.primarySoft : t.surface,
+                  color: selected ? t.primary : t.textMuted,
+                  transition: 'background-color .15s, color .15s, border-color .15s',
+                  '&:hover': { borderColor: selected ? t.primary : t.borderStrong, color: selected ? t.primary : t.textPrimary },
+                  '&.Mui-focusVisible': { outline: `2px solid ${t.primary}`, outlineOffset: 2 },
+                }}
+              >
+                {monthLabel(month)}
+              </ButtonBase>
             );
           })}
         </Box>
+      </SectionCard>
+
+      {/* Totales de los meses seleccionados */}
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(4, minmax(0, 1fr))' },
+          gap: { xs: 1.5, md: 2 },
+        }}
+      >
+        <SummaryCard label="Total gastos" value={calculateFilteredTotal()} isCurrency icon={<ReceiptLongOutlinedIcon />} tone="primary" />
+        <SummaryCard label="Total pagado" value={selectedTotalPaid} isCurrency icon={<TaskAltRoundedIcon />} tone="default" />
+        <SummaryCard
+          label="Balance real"
+          value={selectedRealBalance}
+          isCurrency
+          icon={<AccountBalanceOutlinedIcon />}
+          tone={selectedRealBalance >= 0 ? 'success' : 'danger'}
+        />
+        <SummaryCard
+          label="Proyectado"
+          value={selectedProjected}
+          isCurrency
+          icon={<AccountBalanceWalletOutlinedIcon />}
+          tone={selectedProjected >= 0 ? 'success' : 'danger'}
+        />
       </Box>
 
-      {/* Bar chart */}
+      {/* Gráfica de barras */}
       {hasChartData && (
-        <Box sx={{ mb: 3, height: 240 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-              <XAxis
-                dataKey="name"
-                tick={{ fontSize: 11, fill: textColor }}
-                axisLine={{ stroke: gridColor }}
-                tickLine={false}
-              />
-              <YAxis
-                tick={{ fontSize: 11, fill: textColor }}
-                axisLine={{ stroke: gridColor }}
-                tickLine={false}
-                tickFormatter={(v: number) =>
-                  new Intl.NumberFormat('es-ES', {
-                    notation: 'compact',
-                    style: 'currency',
-                    currency: 'EUR',
-                    maximumFractionDigits: 0,
-                  }).format(v)
-                }
-              />
-              <RechartsTooltip
-                formatter={(value, name) => [
-                  formatCurrency(Number(value)),
-                  name === 'total' ? 'Total' : 'Pagado',
-                ]}
-                contentStyle={{
-                  backgroundColor: isDark ? '#1e293b' : '#fff',
-                  border: `1px solid ${isDark ? '#334155' : '#e2e8f0'}`,
-                  borderRadius: 8,
-                  color: isDark ? '#f1f5f9' : '#1e293b',
-                }}
-              />
-              <Legend
-                formatter={(value: string) => (value === 'total' ? 'Total' : 'Pagado')}
-                wrapperStyle={{ fontSize: 12, color: textColor }}
-              />
-              <Bar dataKey="total" fill={muiTheme.palette.primary.main} radius={[4, 4, 0, 0]} />
-              <Bar dataKey="pagado" fill="#10b981" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </Box>
+        <SectionCard title="Gastos por mes" subtitle="Total frente a pagado" actions={isMobile ? undefined : legend}>
+          {isMobile && <Box sx={{ mb: 1.5 }}>{legend}</Box>}
+          <Box sx={{ height: { xs: 220, md: 280 }, mx: -1 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} barGap={2} barCategoryGap="22%">
+                <CartesianGrid vertical={false} stroke={t.border} />
+                <XAxis
+                  dataKey="name"
+                  tick={{ fontSize: 11, fill: t.textMuted }}
+                  axisLine={false}
+                  tickLine={false}
+                  tickFormatter={(v: string) => v.replace('.', '')}
+                  interval={0}
+                />
+                <YAxis
+                  tick={{ fontSize: 11, fill: t.textMuted }}
+                  axisLine={false}
+                  tickLine={false}
+                  width={isMobile ? 52 : 64}
+                  tickFormatter={(v: number) => (privacyMode ? '' : formatCurrencyCompact(v))}
+                />
+                <RechartsTooltip content={<ChartTooltip />} cursor={{ fill: t.surfaceSoft }} />
+                <Bar dataKey="total" fill={seriesColors.total} radius={[4, 4, 0, 0]} maxBarSize={18} />
+                <Bar dataKey="pagado" fill={seriesColors.pagado} radius={[4, 4, 0, 0]} maxBarSize={18} />
+              </BarChart>
+            </ResponsiveContainer>
+          </Box>
+        </SectionCard>
       )}
 
       {isMobile ? (
-        <Box>
+        <SectionCard title="Por categoría" subtitle="Total de los meses incluidos" noPadding>
           {categories.map((category) => {
             const totalCategory = calculateFilteredTotal(category);
             return (
-              <Accordion key={category} sx={{ mb: 1 }}>
-                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', justifyContent: 'space-between' }}>
-                    <Typography variant="subtitle1">{category}</Typography>
-                    <Typography variant="subtitle2" color="text.secondary">
-                      {formatCurrency(totalCategory)}
+              <Accordion
+                key={category}
+                sx={{
+                  border: 0,
+                  borderRadius: '0 !important',
+                  boxShadow: 'none',
+                  borderBottom: `1px solid ${t.border}`,
+                  '&:last-of-type': { borderBottom: 0 },
+                }}
+              >
+                <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ px: 2 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', justifyContent: 'space-between', gap: 1, pr: 1 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 600, color: t.textPrimary }}>
+                      <CategoryLabel category={category} />
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                      {money(totalCategory)}
                     </Typography>
                   </Box>
                 </AccordionSummary>
-                <AccordionDetails>
-                  <Grid container spacing={1}>
+                <AccordionDetails sx={{ px: 2, pt: 1.5, pb: 2 }}>
+                  <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 1 }}>
                     {months.map((month) => {
                       const monthKey = format(month, 'yyyy-MM');
                       if (!selectedMonths.includes(monthKey)) return null;
                       const amount = monthlyExpenses[monthKey]?.byCategory?.[category] || 0;
                       return (
-                        <Grid item xs={6} key={month.toString()}>
-                          <Card variant="outlined">
-                            <CardContent sx={{ py: 1.5 }}>
-                              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <Typography variant="body2">{format(month, 'MMM', { locale: es })}</Typography>
-                                <Typography variant="body2" sx={{ fontWeight: 600 }}>{formatCurrency(amount)}</Typography>
-                              </Box>
-                            </CardContent>
-                          </Card>
-                        </Grid>
+                        <Box
+                          key={month.toString()}
+                          sx={{ borderRadius: '8px', backgroundColor: t.surfaceSoft, px: 1, py: 0.75, minWidth: 0 }}
+                        >
+                          <Typography variant="caption" sx={{ display: 'block', color: t.textMuted, textTransform: 'capitalize', lineHeight: 1.3 }}>
+                            {monthLabel(month)}
+                          </Typography>
+                          <Typography
+                            variant="caption"
+                            sx={{
+                              display: 'block',
+                              fontWeight: 600,
+                              fontVariantNumeric: 'tabular-nums',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              color: amount === 0 ? t.textMuted : t.textPrimary,
+                            }}
+                          >
+                            {money(amount)}
+                          </Typography>
+                        </Box>
                       );
                     })}
-                  </Grid>
+                  </Box>
                 </AccordionDetails>
               </Accordion>
             );
           })}
-
-          {/* Resumen general */}
-          <Card variant="outlined" sx={{ mt: 2 }}>
-            <CardContent>
-              <Typography variant="subtitle1" sx={{ mb: 1 }}>Resumen seleccionado</Typography>
-              <Grid container spacing={1}>
-                <Grid item xs={12} sm={6}>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <Typography variant="body2">Total</Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>{formatCurrency(calculateFilteredTotal())}</Typography>
-                  </Box>
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <Typography variant="body2">Total pagado</Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>{formatCurrency(
-                      selectedMonths.reduce((acc, monthKey) => acc + (monthlyExpenses[monthKey]?.totalPaid || 0), 0)
-                    )}</Typography>
-                  </Box>
-                </Grid>
-                <Grid item xs={12}>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <Typography variant="body2">Balance proyectado</Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>{formatCurrency(
-                      selectedMonths.reduce((acc, monthKey) => {
-                        const monthExpenses = monthlyExpenses[monthKey] || { total: 0 };
-                        const projectedBalance = balance?.monthlyIncome ? balance.monthlyIncome - monthExpenses.total : 0;
-                        return acc + projectedBalance;
-                      }, 0)
-                    )}</Typography>
-                  </Box>
-                </Grid>
-              </Grid>
-            </CardContent>
-          </Card>
-        </Box>
+          {categories.length === 0 && (
+            <Typography variant="body2" sx={{ color: t.textMuted, p: 2.5, textAlign: 'center' }}>
+              No hay gastos este año
+            </Typography>
+          )}
+        </SectionCard>
       ) : (
-        <TableContainer component={Paper}>
-          <Table size="small" sx={{ 
-            '& .MuiTableCell-root': { 
-              padding: '12px',
-              border: '1px solid rgba(224, 224, 224, 0.3)',
-              boxShadow: '0px 1px 2px rgba(0,0,0,0.05)',
-              transition: 'all 0.2s ease'
-            },
-            '& .MuiTableHead-root': {
-              '& .MuiTableCell-root': {
-                backgroundColor: 'rgba(245, 245, 245, 0.95)',
-                fontWeight: '600',
-                borderBottom: '2px solid rgba(224, 224, 224, 0.6)',
-                backdropFilter: 'blur(4px)',
-                position: 'sticky',
-                top: 0,
-                zIndex: 1
-              }
-            },
-            '& .MuiTableRow-root:hover': {
-              '& .MuiTableCell-root': {
-                backgroundColor: 'rgba(245, 245, 245, 0.6)'
-              }
-            }
-          }}>
-            <TableHead>
-              <TableRow sx={{ backgroundColor: 'background.paper' }}>
-                <TableCell sx={{ fontWeight: 600 }}>Categoría</TableCell>
-                {months.map(month => (
-                  <TableCell key={month.toString()} align="right">
-                    {format(month, 'MMM', { locale: es })}
+        <SectionCard title="Detalle por categoría" subtitle="Importes por mes; los meses excluidos aparecen atenuados" noPadding>
+          <TableContainer sx={{ border: 0, borderRadius: 0, maxWidth: '100%', overflowX: 'auto' }}>
+            <Table size="small" sx={{ '& td, & th': { py: 1.25 } }}>
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={{ ...stickyFirstCell(t.surfaceSoft), zIndex: 3 }}>Categoría</TableCell>
+                  {months.map((month) => (
+                    <TableCell
+                      key={month.toString()}
+                      align="right"
+                      sx={{ opacity: selectedMonths.includes(format(month, 'yyyy-MM')) ? 1 : 0.45 }}
+                    >
+                      {monthLabel(month)}
+                    </TableCell>
+                  ))}
+                  <TableCell align="right" sx={{ borderLeft: `1px solid ${t.border}`, color: `${t.textSecondary} !important` }}>
+                    Total
                   </TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {categories.map((category) => (
+                  <TableRow key={category} hover>
+                    <TableCell component="th" scope="row" sx={{ ...stickyFirstCell(t.surface), fontWeight: 500 }}>
+                      <CategoryLabel category={category} />
+                    </TableCell>
+                    {months.map((month) => {
+                      const monthKey = format(month, 'yyyy-MM');
+                      const selected = selectedMonths.includes(monthKey);
+                      const amount = selected ? (monthlyExpenses[monthKey]?.byCategory?.[category] || 0) : 0;
+                      return (
+                        <TableCell key={month.toString()} sx={amountCellSx(amount, selected)}>
+                          {money(amount)}
+                        </TableCell>
+                      );
+                    })}
+                    <TableCell sx={{ ...amountCellSx(calculateFilteredTotal(category), true), fontWeight: 600, borderLeft: `1px solid ${t.border}` }}>
+                      {money(calculateFilteredTotal(category))}
+                    </TableCell>
+                  </TableRow>
                 ))}
-                <TableCell align="right">Total</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {categories.map(category => (
-                <TableRow key={category}>
-                  <TableCell component="th" scope="row">
-                    {category}
-                  </TableCell>
-                  {months.map(month => {
+
+                {/* Totales */}
+                <TableRow sx={{ ...totalsRowSx, '& > td, & > th': { ...totalsRowSx['& > td, & > th'], borderTop: `1px solid ${t.borderStrong}`, fontWeight: 600 } }}>
+                  <TableCell component="th" scope="row" sx={stickyFirstCell(t.surfaceSoft)}>Total mensual</TableCell>
+                  {months.map((month) => {
                     const monthKey = format(month, 'yyyy-MM');
-                    const amount = selectedMonths.includes(monthKey)
-                      ? (monthlyExpenses[monthKey]?.byCategory?.[category] || 0)
+                    const selected = selectedMonths.includes(monthKey);
+                    const total = selected
+                      ? Object.values(monthlyExpenses[monthKey]?.byCategory || {}).reduce((sum, amount) => sum + amount, 0)
                       : 0;
                     return (
-                      <TableCell 
-                        key={month.toString()} 
-                        align="right"
-                        sx={{
-                          opacity: selectedMonths.includes(monthKey) ? 1 : 0.3,
-                          transition: 'opacity 0.2s ease'
-                        }}
-                      >
-                        {formatCurrency(amount)}
+                      <TableCell key={month.toString()} sx={{ ...amountCellSx(total, selected), fontWeight: 600 }}>
+                        {money(total)}
                       </TableCell>
                     );
                   })}
-                  <TableCell align="right">
-                    {formatCurrency(calculateFilteredTotal(category))}
+                  <TableCell sx={{ ...amountCellSx(calculateFilteredTotal(), true), fontWeight: 700, borderLeft: `1px solid ${t.border}` }}>
+                    {money(calculateFilteredTotal())}
                   </TableCell>
                 </TableRow>
-              ))}
-              <TableRow sx={{ '& td': { fontWeight: 'bold' } }}>
-                <TableCell>Total Mensual</TableCell>
-                {months.map(month => {
-                  const monthKey = format(month, 'yyyy-MM');
-                  const total = selectedMonths.includes(monthKey) 
-                    ? Object.values(monthlyExpenses[monthKey]?.byCategory || {}).reduce((sum, amount) => sum + amount, 0)
-                    : 0;
-                  return (
-                    <TableCell 
-                      key={month.toString()} 
-                      align="right"
-                      sx={{
-                        opacity: selectedMonths.includes(monthKey) ? 1 : 0.3,
-                        transition: 'opacity 0.2s ease'
-                      }}
-                    >
-                      {formatCurrency(total)}
-                    </TableCell>
-                  );
-                })}
-                <TableCell align="right">
-                  {formatCurrency(calculateFilteredTotal())}
-                </TableCell>
-              </TableRow>
-              <TableRow sx={{ '& td': { fontWeight: 'bold', color: 'info.main' } }}>
-                <TableCell>Total Pagado</TableCell>
-                {months.map(month => {
-                  const monthKey = format(month, 'yyyy-MM');
-                  const totalPaid = selectedMonths.includes(monthKey)
-                    ? monthlyExpenses[monthKey]?.totalPaid || 0
-                    : 0;
-                  return (
-                    <TableCell 
-                      key={month.toString()} 
-                      align="right"
-                      sx={{
-                        opacity: selectedMonths.includes(monthKey) ? 1 : 0.3,
-                        transition: 'opacity 0.2s ease'
-                      }}
-                    >
-                      {formatCurrency(totalPaid)}
-                    </TableCell>
-                  );
-                })}
-                <TableCell align="right">
-                  {formatCurrency(
-                    selectedMonths.reduce((acc, monthKey) => 
-                      acc + (monthlyExpenses[monthKey]?.totalPaid || 0), 0
-                    )
-                  )}
-                </TableCell>
-              </TableRow>
-              <TableRow sx={{ '& td': { fontWeight: 'bold', color: 'primary.main' } }}>
-                <TableCell>Balance Real</TableCell>
-                {months.map(month => {
-                  const monthKey = format(month, 'yyyy-MM');
-                  const monthExpenses = monthlyExpenses[monthKey] || { total: 0, totalPaid: 0 };
-                  let realBalance = 0;
-                  
-                  if (selectedMonths.includes(monthKey)) {
-                    if (monthExpenses.total === monthExpenses.totalPaid) {
-                      realBalance = 0;
-                    } else {
-                      const pendingExpenses = monthExpenses.total - monthExpenses.totalPaid;
-                      realBalance = balance?.amount ? 
-                        (isSameMonth(month, new Date()) ? balance.amount - pendingExpenses : balance.monthlyIncome - pendingExpenses) : 
-                        0;
-                    }
-                  }
-                  
-                  return (
-                    <TableCell 
-                      key={month.toString()} 
-                      align="right"
-                      sx={{
-                        opacity: selectedMonths.includes(monthKey) ? 1 : 0.3,
-                        transition: 'opacity 0.2s ease'
-                      }}
-                    >
-                      {formatCurrency(realBalance)}
-                    </TableCell>
-                  );
-                })}
-                <TableCell align="right">
-                  {formatCurrency(
-                    selectedMonths.reduce((acc, monthKey) => {
-                      const month = months.find(m => format(m, 'yyyy-MM') === monthKey);
-                      if (!month) return acc;
-                      
-                      const monthExpenses = monthlyExpenses[monthKey] || { total: 0, totalPaid: 0 };
-                      let realBalance = 0;
-                      
-                      if (monthExpenses.total === monthExpenses.totalPaid) {
-                        realBalance = 0;
-                      } else {
-                        const pendingExpenses = monthExpenses.total - monthExpenses.totalPaid;
-                        realBalance = balance?.amount ? 
-                          (isSameMonth(month, new Date()) ? balance.amount - pendingExpenses : balance.monthlyIncome - pendingExpenses) : 
-                          0;
-                      }
-                      
-                      return acc + realBalance;
-                    }, 0)
-                  )}
-                </TableCell>
-              </TableRow>
-              <TableRow sx={{ '& td': { fontWeight: 'bold', color: 'success.main' } }}>
-                <TableCell>Balance Proyectado</TableCell>
-                {months.map(month => {
-                  const monthKey = format(month, 'yyyy-MM');
-                  const monthExpenses = monthlyExpenses[monthKey] || { total: 0 };
-                  const projectedBalance = selectedMonths.includes(monthKey)
-                    ? (balance?.monthlyIncome ? balance.monthlyIncome - monthExpenses.total : 0)
-                    : 0;
-                  return (
-                    <TableCell 
-                      key={month.toString()} 
-                      align="right"
-                      sx={{
-                        opacity: selectedMonths.includes(monthKey) ? 1 : 0.3,
-                        transition: 'opacity 0.2s ease'
-                      }}
-                    >
-                      {formatCurrency(projectedBalance)}
-                    </TableCell>
-                  );
-                })}
-                <TableCell align="right">
-                  {formatCurrency(
-                    selectedMonths.reduce((acc, monthKey) => {
-                      const monthExpenses = monthlyExpenses[monthKey] || { total: 0 };
-                      const projectedBalance = balance?.monthlyIncome ? balance.monthlyIncome - monthExpenses.total : 0;
-                      return acc + projectedBalance;
-                    }, 0)
-                  )}
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        </TableContainer>
+
+                <TableRow sx={totalsRowSx}>
+                  <TableCell component="th" scope="row" sx={{ ...stickyFirstCell(t.surfaceSoft), color: t.textSecondary }}>Total pagado</TableCell>
+                  {months.map((month) => {
+                    const monthKey = format(month, 'yyyy-MM');
+                    const selected = selectedMonths.includes(monthKey);
+                    const totalPaid = selected ? monthlyExpenses[monthKey]?.totalPaid || 0 : 0;
+                    return (
+                      <TableCell key={month.toString()} sx={{ ...amountCellSx(totalPaid, selected), color: totalPaid === 0 ? t.textMuted : t.textSecondary }}>
+                        {money(totalPaid)}
+                      </TableCell>
+                    );
+                  })}
+                  <TableCell sx={{ ...amountCellSx(selectedTotalPaid, true), fontWeight: 600, color: t.textSecondary, borderLeft: `1px solid ${t.border}` }}>
+                    {money(selectedTotalPaid)}
+                  </TableCell>
+                </TableRow>
+
+                <TableRow sx={totalsRowSx}>
+                  <TableCell component="th" scope="row" sx={{ ...stickyFirstCell(t.surfaceSoft), fontWeight: 600 }}>Balance real</TableCell>
+                  {months.map((month) => {
+                    const monthKey = format(month, 'yyyy-MM');
+                    const selected = selectedMonths.includes(monthKey);
+                    const realBalance = selected ? getRealBalance(month) : 0;
+                    return (
+                      <TableCell key={month.toString()} sx={{ ...amountCellSx(realBalance, selected, 'balance'), fontWeight: 600 }}>
+                        {money(realBalance)}
+                      </TableCell>
+                    );
+                  })}
+                  <TableCell sx={{ ...amountCellSx(selectedRealBalance, true, 'balance'), fontWeight: 700, borderLeft: `1px solid ${t.border}` }}>
+                    {money(selectedRealBalance)}
+                  </TableCell>
+                </TableRow>
+
+                <TableRow sx={totalsRowSx}>
+                  <TableCell component="th" scope="row" sx={{ ...stickyFirstCell(t.surfaceSoft), fontWeight: 600 }}>Balance proyectado</TableCell>
+                  {months.map((month) => {
+                    const monthKey = format(month, 'yyyy-MM');
+                    const selected = selectedMonths.includes(monthKey);
+                    const projectedBalance = selected ? getProjectedBalance(monthKey) : 0;
+                    return (
+                      <TableCell key={month.toString()} sx={{ ...amountCellSx(projectedBalance, selected, 'balance'), fontWeight: 600 }}>
+                        {money(projectedBalance)}
+                      </TableCell>
+                    );
+                  })}
+                  <TableCell sx={{ ...amountCellSx(selectedProjected, true, 'balance'), fontWeight: 700, borderLeft: `1px solid ${t.border}` }}>
+                    {money(selectedProjected)}
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </SectionCard>
       )}
     </Box>
   );

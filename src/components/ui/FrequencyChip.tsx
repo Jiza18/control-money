@@ -1,5 +1,6 @@
-import { Chip } from '@mui/material';
+import { Box } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
+import RepeatRoundedIcon from '@mui/icons-material/RepeatRounded';
 import { tokens } from '../../theme';
 
 interface FrequencyChipProps {
@@ -20,23 +21,25 @@ export default function FrequencyChip({ frequency, size = 'small' }: FrequencyCh
   const t = tokens[theme.palette.mode];
 
   const label = frequencyLabels[frequency] ?? frequency;
+  const recurring = frequency !== 'one-time';
 
   return (
-    <Chip
-      size={size}
-      label={label}
+    <Box
+      component="span"
       sx={{
-        backgroundColor: t.surfaceSoft,
-        color: t.textSecondary,
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 0.5,
+        height: size === 'small' ? 24 : 28,
+        color: t.textMuted,
+        fontSize: size === 'small' ? '0.75rem' : '0.8125rem',
         fontWeight: 500,
-        borderRadius: '8px',
-        border: `1px solid ${t.border}`,
-        height: size === 'small' ? 22 : 28,
-        '& .MuiChip-label': {
-          px: 1,
-          fontSize: size === 'small' ? '0.7rem' : '0.8rem',
-        },
+        whiteSpace: 'nowrap',
+        lineHeight: 1,
       }}
-    />
+    >
+      {recurring && <RepeatRoundedIcon sx={{ fontSize: size === 'small' ? '0.9rem' : '1rem' }} />}
+      {label}
+    </Box>
   );
 }

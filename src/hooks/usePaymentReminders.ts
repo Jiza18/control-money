@@ -39,7 +39,7 @@ async function checkUpcomingPayments() {
 
       new Notification('Control Money — Pagos próximos', {
         body: `Tienes ${upcoming.length} pago${upcoming.length > 1 ? 's' : ''} pendiente${upcoming.length > 1 ? 's' : ''} por ${formatter.format(totalAmount)}`,
-        icon: '/vite.svg',
+        icon: '/logo.svg',
         tag: 'payment-reminder',
       });
     }

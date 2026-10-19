@@ -1,12 +1,13 @@
-import { Chip } from '@mui/material';
+import { Box } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import { tokens } from '../../theme';
 
-type StatusType = 'paid' | 'pending' | 'completed' | 'in_progress' | 'active' | 'inactive';
+type StatusType = 'paid' | 'pending' | 'completed' | 'in_progress' | 'active' | 'inactive' | 'overdue';
 
 interface StatusChipProps {
   status: StatusType;
   size?: 'small' | 'medium';
+  label?: string;
 }
 
 const statusConfig: Record<
@@ -15,33 +16,41 @@ const statusConfig: Record<
 > = {
   paid:        { label: 'Pagado',      bg: 'successSoft', color: 'success' },
   pending:     { label: 'Pendiente',   bg: 'warningSoft', color: 'warning' },
+  overdue:     { label: 'Vencido',     bg: 'dangerSoft',  color: 'danger' },
   completed:   { label: 'Completado',  bg: 'successSoft', color: 'success' },
-  in_progress: { label: 'En progreso', bg: 'infoSoft',    color: 'info' },
+  in_progress: { label: 'En progreso', bg: 'primarySoft', color: 'primary' },
   active:      { label: 'Activa',      bg: 'successSoft', color: 'success' },
   inactive:    { label: 'Inactiva',    bg: 'surfaceSoft', color: 'textMuted' },
 };
 
-export default function StatusChip({ status, size = 'small' }: StatusChipProps) {
+export default function StatusChip({ status, size = 'small', label }: StatusChipProps) {
   const theme = useTheme();
   const t = tokens[theme.palette.mode];
   const cfg = statusConfig[status];
 
   return (
-    <Chip
-      size={size}
-      label={cfg.label}
+    <Box
+      component="span"
       sx={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 0.75,
+        height: size === 'small' ? 24 : 28,
+        px: 1.25,
+        borderRadius: 99,
         backgroundColor: t[cfg.bg],
         color: t[cfg.color],
+        fontSize: size === 'small' ? '0.75rem' : '0.8125rem',
         fontWeight: 600,
-        borderRadius: '8px',
-        border: 'none',
-        height: size === 'small' ? 22 : 28,
-        '& .MuiChip-label': {
-          px: 1,
-          fontSize: size === 'small' ? '0.7rem' : '0.8rem',
-        },
+        whiteSpace: 'nowrap',
+        lineHeight: 1,
       }}
-    />
+    >
+      <Box
+        component="span"
+        sx={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: 'currentColor', flexShrink: 0 }}
+      />
+      {label ?? cfg.label}
+    </Box>
   );
 }

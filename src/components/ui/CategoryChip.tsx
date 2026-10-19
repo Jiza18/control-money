@@ -1,6 +1,6 @@
-import { Chip } from '@mui/material';
+import { Box } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
-import { tokens } from '../../theme';
+import { tokens, getCategoryColor } from '../../theme';
 
 interface CategoryChipProps {
   category: string;
@@ -10,47 +10,31 @@ interface CategoryChipProps {
 export default function CategoryChip({ category, size = 'small' }: CategoryChipProps) {
   const theme = useTheme();
   const t = tokens[theme.palette.mode];
-
-  const getColors = (): { bg: string; color: string } => {
-    switch (category) {
-      case 'Préstamos':
-        return { bg: t.dangerSoft, color: t.danger };
-      case 'Gastos Fijos':
-        return { bg: t.warningSoft, color: t.warning };
-      case 'Comida':
-        return { bg: t.successSoft, color: t.success };
-      case 'Transporte':
-        return { bg: t.infoSoft, color: t.info };
-      case 'Entretenimiento':
-        return { bg: t.primarySoft, color: t.primary };
-      case 'Salud':
-        return {
-          bg: theme.palette.mode === 'dark' ? '#4C1D95' : '#EDE9FE',
-          color: theme.palette.mode === 'dark' ? '#C4B5FD' : '#7C3AED',
-        };
-      default:
-        return { bg: t.surfaceSoft, color: t.textSecondary };
-    }
-  };
-
-  const { bg, color } = getColors();
+  const color = getCategoryColor(category, theme.palette.mode);
 
   return (
-    <Chip
-      size={size}
-      label={category}
+    <Box
+      component="span"
       sx={{
-        backgroundColor: bg,
-        color,
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 0.75,
+        height: size === 'small' ? 24 : 28,
+        px: 1,
+        borderRadius: '7px',
+        backgroundColor: t.surfaceSoft,
+        color: t.textSecondary,
+        fontSize: size === 'small' ? '0.75rem' : '0.8125rem',
         fontWeight: 500,
-        borderRadius: '8px',
-        border: 'none',
-        height: size === 'small' ? 22 : 28,
-        '& .MuiChip-label': {
-          px: 1,
-          fontSize: size === 'small' ? '0.7rem' : '0.8rem',
-        },
+        whiteSpace: 'nowrap',
+        lineHeight: 1,
       }}
-    />
+    >
+      <Box
+        component="span"
+        sx={{ width: 8, height: 8, borderRadius: '3px', backgroundColor: color, flexShrink: 0 }}
+      />
+      {category}
+    </Box>
   );
 }

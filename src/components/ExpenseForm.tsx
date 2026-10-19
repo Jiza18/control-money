@@ -14,7 +14,10 @@ import {
   DialogActions,
   useMediaQuery,
   Typography,
+  IconButton,
+  InputAdornment,
 } from '@mui/material';
+import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import { useTheme } from '@mui/material/styles';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -24,7 +27,7 @@ import { Expense, Account } from '../db/config';
 import { addExpense, updateExpense } from '../db';
 import { getAllAccounts } from '../db/accountsService';
 import { FormSection, AccountChip } from './ui';
-import { tokens } from '../theme';
+import { tokens, getCategoryColor } from '../theme';
 
 const categories = [
   'Préstamos',
@@ -40,7 +43,7 @@ const frequencies = [
   { value: 'one-time', label: 'Una vez' },
   { value: 'monthly', label: 'Mensual' },
   { value: 'bi-monthly', label: 'Cada 2 meses' },
-  { value: 'quarterly', label: 'Cada 3 meses' },
+  { value: 'quarterly', label: 'Trimestral' },
   { value: 'annual', label: 'Anual' },
 ];
 
@@ -215,6 +218,17 @@ export default function ExpenseForm({
   };
 
   const isEditing = !!expenseProp;
+  const mode = muiTheme.palette.mode;
+
+  const categoryOption = (category: string) => (
+    <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 1.25 }}>
+      <Box
+        component="span"
+        sx={{ width: 10, height: 10, borderRadius: '3px', backgroundColor: getCategoryColor(category, mode), flexShrink: 0 }}
+      />
+      {category}
+    </Box>
+  );
 
   return (
     <Dialog
@@ -225,100 +239,53 @@ export default function ExpenseForm({
       fullScreen={isMobile}
       PaperProps={{
         sx: isMobile
-          ? { borderRadius: 0, margin: 0, maxHeight: '100%' }
+          ? { borderRadius: 0, margin: 0, maxHeight: '100%', border: 0 }
           : undefined,
       }}
     >
-      <DialogTitle sx={{ fontWeight: 700, pb: 1 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Typography variant="h6" sx={{ fontWeight: 700 }}>
-            {isEditing ? 'Editar Gasto' : 'Añadir Gasto'}
+      <DialogTitle
+        component="div"
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 2,
+          px: { xs: 2, sm: 3 },
+          pt: isMobile ? 'calc(env(safe-area-inset-top) + 12px)' : 2.5,
+          pb: 2,
+          borderBottom: `1px solid ${t.border}`,
+        }}
+      >
+        <Box sx={{ minWidth: 0 }}>
+          <Typography component="h2" variant="h6" sx={{ fontWeight: 700, lineHeight: 1.3 }}>
+            {isEditing ? 'Editar gasto' : 'Nuevo gasto'}
           </Typography>
-          <Typography
-            variant="caption"
-            sx={{
-              px: 1,
-              py: 0.25,
-              borderRadius: 1,
-              backgroundColor: isEditing ? t.warningSoft : t.successSoft,
-              color: isEditing ? t.warning : t.success,
-              fontWeight: 600,
-            }}
-          >
-            {isEditing ? 'Editando' : 'Nuevo'}
+          <Typography variant="caption" sx={{ color: t.textMuted, display: 'block' }}>
+            {isEditing
+              ? 'Modifica los datos y guarda los cambios'
+              : 'Registra un gasto puntual o recurrente'}
           </Typography>
         </Box>
+        <IconButton onClick={onClose} aria-label="Cerrar" edge="end">
+          <CloseRoundedIcon />
+        </IconButton>
       </DialogTitle>
 
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
-        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 3, pt: 1 }}>
-          {/* Sección: Información básica */}
-          <FormSection title="Información básica">
-            <FormControl fullWidth required>
-              <InputLabel>Categoría</InputLabel>
-              <Select
-                value={expense.category}
-                label="Categoría"
-                onChange={(e) => setExpense({ ...expense, category: e.target.value })}
-              >
-                {categories.map((category) => (
-                  <MenuItem key={category} value={category}>
-                    {category}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+        <DialogContent
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 3,
+            px: { xs: 2, sm: 3 },
+            pt: '20px !important',
+            pb: 3,
+          }}
+        >
+          {/* Sección: Importe y fecha */}
+          <FormSection title="Importe y fecha">
             <TextField
-              label="Descripción"
-              value={expense.description}
-              onChange={(e) => setExpense({ ...expense, description: e.target.value })}
-              required
-              fullWidth
-              multiline
-              rows={2}
-            />
-
-            <FormControl fullWidth>
-              <InputLabel id="account-label" shrink>Cuenta</InputLabel>
-              <Select
-                labelId="account-label"
-                value={expense.accountId != null ? String(expense.accountId) : ''}
-                input={<OutlinedInput notched label="Cuenta" />}
-                onChange={(e) =>
-                  setExpense({
-                    ...expense,
-                    accountId:
-                      e.target.value === '' ? undefined : Number(e.target.value),
-                  })
-                }
-                renderValue={(value) => {
-                  if (!value) return 'Sin cuenta';
-                  const acc = accounts.find((a) => String(a.id) === value);
-                  return acc ? (
-                    <AccountChip name={acc.name} color={acc.color} />
-                  ) : (
-                    'Sin cuenta'
-                  );
-                }}
-                displayEmpty
-              >
-                <MenuItem value="">
-                  <em>Sin cuenta</em>
-                </MenuItem>
-                {accounts.map((account) => (
-                  <MenuItem key={account.id} value={String(account.id)}>
-                    <AccountChip name={account.name} color={account.color} />
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </FormSection>
-
-          {/* Sección: Monto y fecha */}
-          <FormSection title="Monto y fecha">
-            <TextField
-              label="Cantidad"
+              label="Importe"
               type="number"
               value={expense.amount}
               onChange={(e) => {
@@ -328,52 +295,134 @@ export default function ExpenseForm({
               }}
               required
               fullWidth
+              InputProps={{
+                endAdornment: <InputAdornment position="end">€</InputAdornment>,
+              }}
+              inputProps={{
+                inputMode: 'decimal',
+                step: '0.01',
+                style: { fontSize: '1.25rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums' },
+              }}
             />
 
-            <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={es}>
-              <DatePicker
-                label={
-                  expense.frequency === 'one-time' ? 'Fecha del gasto' : 'Fecha de inicio'
-                }
-                value={expense.date}
-                onChange={(newDate) => newDate && setExpense({ ...expense, date: newDate })}
-                slotProps={{
-                  textField: {
-                    required: true,
-                    fullWidth: true,
-                    helperText:
-                      expense.frequency === 'one-time'
-                        ? 'Selecciona la fecha en que se realizó el gasto'
-                        : 'Selecciona la fecha de inicio para gastos recurrentes',
-                  },
-                }}
-              />
-            </LocalizationProvider>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
+              <FormControl fullWidth required>
+                <InputLabel id="frequency-label">Frecuencia</InputLabel>
+                <Select
+                  labelId="frequency-label"
+                  value={expense.frequency}
+                  label="Frecuencia"
+                  onChange={(e) =>
+                    setExpense({
+                      ...expense,
+                      frequency: e.target.value as Expense['frequency'],
+                    })
+                  }
+                >
+                  {frequencies.map((freq) => (
+                    <MenuItem key={freq.value} value={freq.value}>
+                      {freq.label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
 
-            <FormControl fullWidth required>
-              <InputLabel>Frecuencia</InputLabel>
-              <Select
-                value={expense.frequency}
-                label="Frecuencia"
-                onChange={(e) =>
-                  setExpense({
-                    ...expense,
-                    frequency: e.target.value as Expense['frequency'],
-                  })
-                }
-              >
-                {frequencies.map((freq) => (
-                  <MenuItem key={freq.value} value={freq.value}>
-                    {freq.label}
+              <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={es}>
+                <DatePicker
+                  label={
+                    expense.frequency === 'one-time' ? 'Fecha del gasto' : 'Fecha de inicio'
+                  }
+                  value={expense.date}
+                  onChange={(newDate) => newDate && setExpense({ ...expense, date: newDate })}
+                  slotProps={{
+                    textField: {
+                      required: true,
+                      fullWidth: true,
+                    },
+                  }}
+                />
+              </LocalizationProvider>
+            </Box>
+            <Typography variant="caption" sx={{ color: t.textMuted, mt: -1 }}>
+              {expense.frequency === 'one-time'
+                ? 'Fecha en que se realizó el gasto.'
+                : 'Fecha del primer pago; se repetirá con la frecuencia elegida.'}
+            </Typography>
+          </FormSection>
+
+          {/* Sección: Detalles */}
+          <FormSection title="Detalles">
+            <TextField
+              label="Descripción"
+              value={expense.description}
+              onChange={(e) => setExpense({ ...expense, description: e.target.value })}
+              required
+              fullWidth
+              multiline
+              minRows={1}
+              maxRows={4}
+              placeholder="Ej.: Alquiler, supermercado, gasolina…"
+            />
+
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
+              <FormControl fullWidth required>
+                <InputLabel id="category-label">Categoría</InputLabel>
+                <Select
+                  labelId="category-label"
+                  value={expense.category}
+                  label="Categoría"
+                  onChange={(e) => setExpense({ ...expense, category: e.target.value })}
+                  renderValue={(value) => (value ? categoryOption(value) : '')}
+                >
+                  {categories.map((category) => (
+                    <MenuItem key={category} value={category}>
+                      {categoryOption(category)}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+
+              <FormControl fullWidth>
+                <InputLabel id="account-label" shrink>Cuenta</InputLabel>
+                <Select
+                  labelId="account-label"
+                  value={expense.accountId != null ? String(expense.accountId) : ''}
+                  input={<OutlinedInput notched label="Cuenta" />}
+                  onChange={(e) =>
+                    setExpense({
+                      ...expense,
+                      accountId:
+                        e.target.value === '' ? undefined : Number(e.target.value),
+                    })
+                  }
+                  renderValue={(value) => {
+                    if (!value) return <Box component="span" sx={{ color: t.textMuted }}>Sin cuenta</Box>;
+                    const acc = accounts.find((a) => String(a.id) === value);
+                    return acc ? (
+                      <AccountChip name={acc.name} color={acc.color} />
+                    ) : (
+                      <Box component="span" sx={{ color: t.textMuted }}>Sin cuenta</Box>
+                    );
+                  }}
+                  displayEmpty
+                  sx={{ '& .MuiSelect-select': { display: 'flex', alignItems: 'center' } }}
+                >
+                  <MenuItem value="">
+                    <Box component="span" sx={{ color: t.textMuted }}>Sin cuenta</Box>
                   </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+                  {accounts.map((account) => (
+                    <MenuItem key={account.id} value={String(account.id)}>
+                      <AccountChip name={account.name} color={account.color} />
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Box>
           </FormSection>
 
           {/* Sección: Opciones (sólo si aplica) */}
           {expense.category === 'Préstamos' && expense.frequency !== 'one-time' && (
-            <FormSection title="Opciones">
+            <FormSection title="Préstamo">
               <TextField
                 label="Duración (meses)"
                 type="number"
@@ -383,7 +432,7 @@ export default function ExpenseForm({
                 }
                 fullWidth
                 required
-                inputProps={{ min: 1 }}
+                inputProps={{ min: 1, inputMode: 'numeric' }}
                 helperText="Número de meses durante los que se realizará el pago"
               />
             </FormSection>
@@ -392,27 +441,29 @@ export default function ExpenseForm({
 
         <DialogActions
           sx={{
-            px: 3,
-            pb: isMobile ? 3 : 2,
+            px: { xs: 2, sm: 3 },
+            py: 2,
             gap: 1,
+            borderTop: `1px solid ${t.border}`,
+            backgroundColor: t.surface,
             ...(isMobile && {
               position: 'sticky',
               bottom: 0,
-              backgroundColor: t.surface,
-              borderTop: `1px solid ${t.border}`,
+              mt: 'auto',
+              pb: 'calc(env(safe-area-inset-bottom) + 16px)',
             }),
           }}
         >
-          <Button onClick={onClose} variant="outlined" sx={{ borderRadius: '12px' }}>
+          <Button onClick={onClose} variant="outlined" color="inherit" sx={{ flex: isMobile ? 1 : undefined }}>
             Cancelar
           </Button>
           <Button
             type="submit"
             variant="contained"
             color="primary"
-            sx={{ borderRadius: '12px', flex: isMobile ? 1 : undefined }}
+            sx={{ flex: isMobile ? 2 : undefined, minWidth: 120 }}
           >
-            Guardar
+            {isEditing ? 'Guardar cambios' : 'Guardar gasto'}
           </Button>
         </DialogActions>
       </form>

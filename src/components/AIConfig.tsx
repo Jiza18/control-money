@@ -7,14 +7,19 @@ import {
   IconButton,
   InputAdornment,
   CircularProgress,
+  Link,
 } from '@mui/material';
-import VisibilityIcon from '@mui/icons-material/Visibility';
-import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
+import { useTheme } from '@mui/material/styles';
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
+import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
+import { tokens } from '../theme';
 import { getAIConfig, saveAIConfig } from '../db/aiConfigService';
 import { useToast } from '../contexts/ToastContext';
 
 export default function AIConfig() {
   const toast = useToast();
+  const theme = useTheme();
+  const t = tokens[theme.palette.mode];
   const [apiKey, setApiKey] = useState('');
   const [showKey, setShowKey] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -43,16 +48,16 @@ export default function AIConfig() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <Typography variant="body2" color="text.secondary">
+      <Typography variant="body2" sx={{ color: t.textSecondary }}>
         Necesitas una API key de{' '}
-        <a
+        <Link
           href="https://console.anthropic.com/settings/keys"
           target="_blank"
           rel="noopener noreferrer"
-          style={{ color: 'inherit' }}
+          sx={{ color: t.primary, fontWeight: 600, textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
         >
           console.anthropic.com
-        </a>{' '}
+        </Link>{' '}
         para escanear tickets con IA. La key se guarda solo en tu navegador.
       </Typography>
 
@@ -63,11 +68,16 @@ export default function AIConfig() {
         type={showKey ? 'text' : 'password'}
         placeholder="sk-ant-..."
         fullWidth
+        autoComplete="off"
         InputProps={{
           endAdornment: (
             <InputAdornment position="end">
-              <IconButton onClick={() => setShowKey((v) => !v)} edge="end" size="small">
-                {showKey ? <VisibilityOffIcon fontSize="small" /> : <VisibilityIcon fontSize="small" />}
+              <IconButton
+                onClick={() => setShowKey((v) => !v)}
+                edge="end"
+                aria-label={showKey ? 'Ocultar API key' : 'Mostrar API key'}
+              >
+                {showKey ? <VisibilityOffOutlinedIcon fontSize="small" /> : <VisibilityOutlinedIcon fontSize="small" />}
               </IconButton>
             </InputAdornment>
           ),
@@ -78,8 +88,8 @@ export default function AIConfig() {
         variant="contained"
         onClick={handleSave}
         disabled={saving}
-        startIcon={saving ? <CircularProgress size={16} /> : undefined}
-        sx={{ borderRadius: '12px', alignSelf: 'flex-start' }}
+        startIcon={saving ? <CircularProgress size={16} color="inherit" /> : undefined}
+        sx={{ alignSelf: { xs: 'stretch', sm: 'flex-start' } }}
       >
         Guardar API key
       </Button>

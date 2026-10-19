@@ -1,11 +1,13 @@
 import { useTheme } from '@mui/material/styles';
 import { tokens } from '../../theme';
 import { usePrivacy } from '../../contexts/PrivacyContext';
+import { formatCurrency } from '../../utils/formatters';
 
 interface MoneyAmountProps {
   value: number;
   size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
-  tone?: 'default' | 'primary' | 'success' | 'warning' | 'danger' | 'muted';
+  tone?: 'default' | 'primary' | 'success' | 'warning' | 'danger' | 'muted' | 'inherit';
+  weight?: 500 | 600 | 700;
   hidden?: boolean;
   className?: string;
 }
@@ -22,6 +24,7 @@ export default function MoneyAmount({
   value,
   size = 'md',
   tone = 'default',
+  weight,
   hidden = false,
   className,
 }: MoneyAmountProps) {
@@ -36,13 +39,10 @@ export default function MoneyAmount({
     warning: t.warning,
     danger: t.danger,
     muted: t.textMuted,
+    inherit: 'inherit',
   };
 
-  const formatted = new Intl.NumberFormat('es-ES', {
-    style: 'currency',
-    currency: 'EUR',
-  }).format(value);
-
+  const isLarge = size === 'lg' || size === 'xl';
   const shouldHide = hidden || privacyMode;
 
   return (
@@ -50,13 +50,14 @@ export default function MoneyAmount({
       className={className}
       style={{
         fontSize: sizeMap[size],
-        fontWeight: 700,
+        fontWeight: weight ?? (isLarge ? 700 : 600),
         color: colorMap[tone],
         fontVariantNumeric: 'tabular-nums',
-        letterSpacing: '-0.01em',
+        letterSpacing: isLarge ? '-0.025em' : '-0.005em',
+        whiteSpace: 'nowrap',
       }}
     >
-      {shouldHide ? '••••' : formatted}
+      {shouldHide ? '•••••' : formatCurrency(value)}
     </span>
   );
 }

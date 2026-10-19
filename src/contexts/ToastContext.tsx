@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useCallback, useRef, ReactNode } from 'react';
 import { Snackbar, Alert } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
+import { tokens } from '../theme';
 
 interface ToastMessage {
   id: string;
@@ -23,6 +25,15 @@ export function useToast(): ToastContextValue {
 }
 
 export function ToastProvider({ children }: { children: ReactNode }) {
+  const theme = useTheme();
+  // Toast en superficie invertida; el icono usa el color semántico del modo contrario para contrastar
+  const inverse = tokens[theme.palette.mode === 'light' ? 'dark' : 'light'];
+  const severityColor = {
+    success: inverse.success,
+    error: inverse.danger,
+    info: inverse.info,
+    warning: inverse.warning,
+  };
   const queueRef = useRef<ToastMessage[]>([]);
   const [current, setCurrent] = useState<ToastMessage | null>(null);
   const [open, setOpen] = useState(false);
@@ -76,13 +87,22 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         onClose={handleClose}
         TransitionProps={{ onExited: handleExited }}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-        sx={{ mb: { xs: 8, lg: 2 } }}
+        sx={{ mb: { xs: 'calc(64px + env(safe-area-inset-bottom) + 8px)', lg: 2 } }}
       >
         <Alert
           onClose={handleClose}
           severity={current?.severity || 'info'}
-          variant="filled"
-          sx={{ width: '100%' }}
+          variant="standard"
+          sx={{
+            width: '100%',
+            minWidth: { sm: 320 },
+            backgroundColor: theme.palette.mode === 'light' ? '#101828' : '#EDF0F5',
+            color: theme.palette.mode === 'light' ? '#FFFFFF' : '#101828',
+            boxShadow: tokens[theme.palette.mode].shadowLg,
+            fontWeight: 500,
+            '& .MuiAlert-icon': { color: severityColor[current?.severity || 'info'] },
+            '& .MuiAlert-action .MuiIconButton-root': { color: 'inherit', opacity: 0.7 },
+          }}
         >
           {current?.message || ''}
         </Alert>

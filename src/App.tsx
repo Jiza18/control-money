@@ -6,7 +6,9 @@ import {
   BottomNavigation,
   BottomNavigationAction,
   Box,
+  Button,
   IconButton,
+  Tooltip,
   Typography,
   SwipeableDrawer,
   useMediaQuery,
@@ -19,34 +21,20 @@ import LogoMark from './components/LogoMark';
 import MoreMenuSheet from './components/MoreMenuSheet';
 import { getTheme } from './theme';
 import { tokens } from './theme';
-import TableChartIcon from '@mui/icons-material/TableChart';
-import SavingsIcon from '@mui/icons-material/Savings';
-import ShowChartIcon from '@mui/icons-material/ShowChart';
-import SettingsIcon from '@mui/icons-material/Settings';
-import MenuIcon from '@mui/icons-material/Menu';
-import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
-import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import LightModeIcon from '@mui/icons-material/LightMode';
-import DarkModeIcon from '@mui/icons-material/DarkMode';
-import VisibilityIcon from '@mui/icons-material/Visibility';
-import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
+import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
+import SavingsOutlinedIcon from '@mui/icons-material/SavingsOutlined';
+import TrendingUpRoundedIcon from '@mui/icons-material/TrendingUpRounded';
+import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
+import MenuRoundedIcon from '@mui/icons-material/MenuRounded';
+import KeyboardDoubleArrowLeftRoundedIcon from '@mui/icons-material/KeyboardDoubleArrowLeftRounded';
+import KeyboardDoubleArrowRightRoundedIcon from '@mui/icons-material/KeyboardDoubleArrowRightRounded';
+import LightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined';
+import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined';
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
+import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
 import { ToastProvider } from './contexts/ToastContext';
 import { PrivacyProvider, usePrivacy } from './contexts/PrivacyContext';
 import { usePaymentReminders } from './hooks/usePaymentReminders';
-
-const routeTitles: Record<string, string> = {
-  '/expenses': 'Gastos',
-  '/savings': 'Ahorros',
-  '/investments': 'Inversiones',
-  '/configuration': 'Configuración',
-};
-
-function getRouteTitle(pathname: string): string {
-  for (const [key, val] of Object.entries(routeTitles)) {
-    if (pathname.startsWith(key)) return val;
-  }
-  return 'Control Money';
-}
 
 // Inner layout — requires PrivacyProvider + ToastProvider in ancestry
 function AppInner({ theme, toggleTheme }: { theme: 'light' | 'dark'; toggleTheme: () => void }) {
@@ -89,11 +77,14 @@ function AppInner({ theme, toggleTheme }: { theme: 'light' | 'dark'; toggleTheme
   };
 
   const navLinks = [
-    { path: 'expenses', label: 'Gastos', icon: <TableChartIcon fontSize="small" /> },
-    { path: 'savings', label: 'Ahorros', icon: <SavingsIcon fontSize="small" /> },
-    { path: 'investments', label: 'Inversiones', icon: <ShowChartIcon fontSize="small" /> },
-    { path: 'configuration', label: 'Configuración', icon: <SettingsIcon fontSize="small" /> },
+    { path: 'expenses', label: 'Gastos', icon: <ReceiptLongOutlinedIcon fontSize="small" /> },
+    { path: 'savings', label: 'Ahorros', icon: <SavingsOutlinedIcon fontSize="small" /> },
+    { path: 'investments', label: 'Inversiones', icon: <TrendingUpRoundedIcon fontSize="small" /> },
+    { path: 'configuration', label: 'Configuración', icon: <SettingsOutlinedIcon fontSize="small" /> },
   ];
+
+  const privacyLabel = privacyMode ? 'Mostrar importes' : 'Ocultar importes';
+  const themeLabel = theme === 'dark' ? 'Modo claro' : 'Modo oscuro';
 
   const sidebarContent = (
     <Box
@@ -108,79 +99,75 @@ function AppInner({ theme, toggleTheme }: { theme: 'light' | 'dark'; toggleTheme
       <Box
         sx={{
           px: 2,
-          py: 1.5,
-          borderBottom: `1px solid ${t.border}`,
+          height: 64,
+          flexShrink: 0,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           gap: 1,
-          minHeight: 56,
         }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <LogoMark size={28} />
-          <Typography
-            variant="h6"
-            sx={{ fontWeight: 700, color: t.textPrimary, fontSize: '1rem' }}
-          >
-            Control Money
-          </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, minWidth: 0 }}>
+          <LogoMark size={30} />
+          <Box sx={{ minWidth: 0 }}>
+            <Typography sx={{ fontWeight: 700, fontSize: '0.9375rem', letterSpacing: '-0.01em', color: t.textPrimary, lineHeight: 1.2 }}>
+              Control Money
+            </Typography>
+            <Typography sx={{ fontSize: '0.6875rem', color: t.textMuted, lineHeight: 1.3 }}>
+              Finanzas personales
+            </Typography>
+          </Box>
         </Box>
-        <IconButton
-          size="small"
-          onClick={() => (isDesktop ? setDrawerOpen(false) : setMobileDrawerOpen(false))}
-          sx={{ color: t.textSecondary }}
-        >
-          <ChevronLeftIcon />
-        </IconButton>
-      </Box>
-
-      {/* Balance form */}
-      <Box sx={{ px: 2, pt: 2 }}>
-        <BalanceForm />
+        <Tooltip title="Ocultar menú">
+          <IconButton
+            size="small"
+            aria-label="Ocultar menú"
+            onClick={() => (isDesktop ? setDrawerOpen(false) : setMobileDrawerOpen(false))}
+          >
+            <KeyboardDoubleArrowLeftRoundedIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
       </Box>
 
       {/* Nav links */}
-      <Box sx={{ flex: 1, overflowY: 'auto', px: 1.5, py: 1.5 }}>
-        <Typography
-          variant="overline"
-          sx={{
-            px: 1.5,
-            fontSize: '0.65rem',
-            fontWeight: 700,
-            letterSpacing: '0.1em',
-            color: t.textMuted,
-          }}
-        >
-          Secciones
+      <Box component="nav" aria-label="Secciones" sx={{ px: 1.5, pt: 1, pb: 2 }}>
+        <Typography variant="overline" sx={{ display: 'block', px: 1.25, mb: 0.5, color: t.textMuted }}>
+          Menú
         </Typography>
-        <Box sx={{ mt: 0.5, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
           {navLinks.map((link) => {
             const active = isCurrentPath(link.path);
             return (
               <Box
                 key={link.path}
+                component="button"
+                type="button"
                 onClick={() => navigateTo(link.path)}
+                aria-current={active ? 'page' : undefined}
                 sx={{
+                  all: 'unset',
+                  boxSizing: 'border-box',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 1.5,
-                  px: 1.5,
-                  py: 1,
-                  borderRadius: '12px',
+                  gap: 1.25,
+                  width: '100%',
+                  px: 1.25,
+                  height: 40,
+                  borderRadius: '10px',
                   cursor: 'pointer',
                   backgroundColor: active ? t.primarySoft : 'transparent',
                   color: active ? t.primary : t.textSecondary,
                   fontWeight: active ? 600 : 500,
-                  fontSize: '0.9rem',
+                  fontSize: '0.875rem',
                   transition: 'background-color 0.15s, color 0.15s',
                   '&:hover': {
                     backgroundColor: active ? t.primarySoft : t.surfaceSoft,
                     color: active ? t.primary : t.textPrimary,
                   },
+                  '&:focus-visible': { outline: `2px solid ${t.primary}`, outlineOffset: 1 },
                 }}
               >
-                <Box sx={{ display: 'flex', opacity: active ? 1 : 0.7 }}>{link.icon}</Box>
+                <Box sx={{ display: 'flex' }}>{link.icon}</Box>
                 {link.label}
               </Box>
             );
@@ -188,11 +175,17 @@ function AppInner({ theme, toggleTheme }: { theme: 'light' | 'dark'; toggleTheme
         </Box>
       </Box>
 
+      {/* Balance form */}
+      <Box sx={{ px: 2, flex: 1, overflowY: 'auto' }}>
+        <BalanceForm />
+      </Box>
+
       {/* Footer */}
       <Box
         sx={{
           px: 2,
           py: 2,
+          mt: 2,
           borderTop: `1px solid ${t.border}`,
           display: 'flex',
           flexDirection: 'column',
@@ -202,13 +195,27 @@ function AppInner({ theme, toggleTheme }: { theme: 'light' | 'dark'; toggleTheme
         <Box sx={{ minWidth: 0, overflowX: 'hidden' }}>
           <DatabaseIndicator />
         </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.5 }}>
-          <IconButton size="small" onClick={togglePrivacy} sx={{ color: t.textSecondary }}>
-            {privacyMode ? <VisibilityOffIcon /> : <VisibilityIcon />}
-          </IconButton>
-          <IconButton size="small" onClick={toggleTheme} sx={{ color: t.textSecondary }}>
-            {theme === 'dark' ? <LightModeIcon /> : <DarkModeIcon />}
-          </IconButton>
+        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
+          <Button
+            size="small"
+            variant="outlined"
+            color="inherit"
+            onClick={togglePrivacy}
+            startIcon={privacyMode ? <VisibilityOffOutlinedIcon /> : <VisibilityOutlinedIcon />}
+            sx={{ color: t.textSecondary, fontWeight: 500, justifyContent: 'flex-start', minWidth: 0 }}
+          >
+            {privacyMode ? 'Oculto' : 'Visible'}
+          </Button>
+          <Button
+            size="small"
+            variant="outlined"
+            color="inherit"
+            onClick={toggleTheme}
+            startIcon={theme === 'dark' ? <LightModeOutlinedIcon /> : <DarkModeOutlinedIcon />}
+            sx={{ color: t.textSecondary, fontWeight: 500, justifyContent: 'flex-start', minWidth: 0 }}
+          >
+            {theme === 'dark' ? 'Claro' : 'Oscuro'}
+          </Button>
         </Box>
       </Box>
     </Box>
@@ -227,7 +234,7 @@ function AppInner({ theme, toggleTheme }: { theme: 'light' | 'dark'; toggleTheme
         <Box
           component="aside"
           sx={{
-            width: 260,
+            width: 264,
             flexShrink: 0,
             borderRight: `1px solid ${t.border}`,
             height: '100vh',
@@ -243,22 +250,25 @@ function AppInner({ theme, toggleTheme }: { theme: 'light' | 'dark'; toggleTheme
 
       {/* Desktop sidebar collapsed toggle */}
       {isDesktop && !drawerOpen && (
-        <IconButton
-          size="small"
-          onClick={() => setDrawerOpen(true)}
-          sx={{
-            position: 'fixed',
-            left: 12,
-            top: 12,
-            zIndex: 200,
-            backgroundColor: t.surface,
-            border: `1px solid ${t.border}`,
-            color: t.textSecondary,
-            '&:hover': { backgroundColor: t.surfaceSoft },
-          }}
-        >
-          <ChevronRightIcon />
-        </IconButton>
+        <Tooltip title="Mostrar menú" placement="right">
+          <IconButton
+            size="small"
+            aria-label="Mostrar menú"
+            onClick={() => setDrawerOpen(true)}
+            sx={{
+              position: 'fixed',
+              left: 16,
+              top: 16,
+              zIndex: 200,
+              backgroundColor: t.surface,
+              border: `1px solid ${t.border}`,
+              boxShadow: t.shadowSm,
+              '&:hover': { backgroundColor: t.surfaceSoft },
+            }}
+          >
+            <KeyboardDoubleArrowRightRoundedIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
       )}
 
       {/* Mobile swipeable drawer */}
@@ -270,7 +280,7 @@ function AppInner({ theme, toggleTheme }: { theme: 'light' | 'dark'; toggleTheme
           onOpen={() => setMobileDrawerOpen(true)}
           PaperProps={{
             sx: {
-              width: 280,
+              width: 288,
               backgroundColor: t.surface,
             },
           }}
@@ -292,6 +302,7 @@ function AppInner({ theme, toggleTheme }: { theme: 'light' | 'dark'; toggleTheme
         {/* Mobile header */}
         {!isDesktop && (
           <Box
+            component="header"
             sx={{
               height: 56,
               position: 'sticky',
@@ -301,33 +312,47 @@ function AppInner({ theme, toggleTheme }: { theme: 'light' | 'dark'; toggleTheme
               alignItems: 'center',
               justifyContent: 'space-between',
               px: 1,
-              backdropFilter: 'blur(16px)',
+              pt: 'env(safe-area-inset-top)',
+              boxSizing: 'content-box',
+              backdropFilter: 'saturate(180%) blur(16px)',
               backgroundColor:
                 theme === 'light'
-                  ? 'rgba(247,248,250,0.85)'
-                  : 'rgba(11,17,32,0.85)',
+                  ? 'rgba(244,245,248,0.88)'
+                  : 'rgba(11,14,20,0.88)',
               borderBottom: `1px solid ${t.border}`,
             }}
           >
-            <IconButton size="small" onClick={() => setMobileDrawerOpen(true)} sx={{ color: t.textSecondary }}>
-              <MenuIcon />
-            </IconButton>
-            <Typography variant="h6" sx={{ fontWeight: 700, fontSize: '1rem', color: t.textPrimary }}>
-              {getRouteTitle(location.pathname)}
-            </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-              <IconButton size="small" onClick={togglePrivacy} sx={{ color: t.textSecondary }}>
-                {privacyMode ? <VisibilityOffIcon /> : <VisibilityIcon />}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
+              <IconButton aria-label="Abrir menú" onClick={() => setMobileDrawerOpen(true)}>
+                <MenuRoundedIcon />
               </IconButton>
-              <IconButton size="small" onClick={toggleTheme} sx={{ color: t.textSecondary }}>
-                {theme === 'dark' ? <LightModeIcon /> : <DarkModeIcon />}
+              <LogoMark size={26} />
+              <Typography sx={{ fontWeight: 700, fontSize: '0.9375rem', letterSpacing: '-0.01em', color: t.textPrimary, ml: 0.25 }}>
+                Control Money
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <IconButton aria-label={privacyLabel} onClick={togglePrivacy}>
+                {privacyMode ? <VisibilityOffOutlinedIcon /> : <VisibilityOutlinedIcon />}
+              </IconButton>
+              <IconButton aria-label={themeLabel} onClick={toggleTheme}>
+                {theme === 'dark' ? <LightModeOutlinedIcon /> : <DarkModeOutlinedIcon />}
               </IconButton>
             </Box>
           </Box>
         )}
 
         {/* Page content */}
-        <Box sx={{ p: { xs: 2, sm: 3, md: 4 }, pb: { xs: 12, lg: 4 } }}>
+        <Box
+          sx={{
+            width: '100%',
+            maxWidth: 1240,
+            mx: 'auto',
+            px: { xs: 2, sm: 3, lg: 5 },
+            pt: { xs: 2.5, sm: 3, lg: 5 },
+            pb: { xs: 'calc(64px + env(safe-area-inset-bottom) + 32px)', lg: 6 },
+          }}
+        >
           <Outlet />
         </Box>
       </Box>
@@ -353,11 +378,31 @@ function AppInner({ theme, toggleTheme }: { theme: 'light' | 'dark'; toggleTheme
               else if (newValue === 3) navigate('/configuration');
               setBottomNavValue(newValue);
             }}
+            sx={{ height: 'calc(64px + env(safe-area-inset-bottom))', pb: 'env(safe-area-inset-bottom)' }}
           >
-            <BottomNavigationAction label="Gastos" icon={<TableChartIcon />} />
-            <BottomNavigationAction label="Ahorros" icon={<SavingsIcon />} />
-            <BottomNavigationAction label="Inversiones" icon={<ShowChartIcon />} />
-            <BottomNavigationAction label="Config." icon={<SettingsIcon />} />
+            {navLinks.map((link) => (
+              <BottomNavigationAction
+                key={link.path}
+                label={link.path === 'configuration' ? 'Ajustes' : link.label}
+                icon={
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: 48,
+                      height: 28,
+                      borderRadius: 99,
+                      transition: 'background-color .15s',
+                      backgroundColor: isCurrentPath(link.path) ? t.primarySoft : 'transparent',
+                      '& svg': { fontSize: '1.3rem' },
+                    }}
+                  >
+                    {link.icon}
+                  </Box>
+                }
+              />
+            ))}
           </BottomNavigation>
         </Box>
       )}
@@ -390,6 +435,10 @@ function App() {
     const root = document.documentElement;
     root.classList.toggle('dark', theme === 'dark');
     localStorage.setItem('theme', theme);
+    // Barra del navegador en móvil con el mismo fondo que la app
+    document
+      .querySelectorAll('meta[name="theme-color"]')
+      .forEach((m) => m.setAttribute('content', tokens[theme].background));
   }, [theme]);
 
   const toggleTheme = () => setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));

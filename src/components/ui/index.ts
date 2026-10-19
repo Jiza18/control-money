@@ -10,3 +10,6 @@ export { default as BottomSheet } from './BottomSheet';
 export { default as FormSection } from './FormSection';
 export { default as PageContainer } from './PageContainer';
 export { default as SwipeableCard } from './SwipeableCard';
+
+export { default as PageHeader } from './PageHeader';
+export { default as SectionCard } from './SectionCard';

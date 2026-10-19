@@ -1,10 +1,17 @@
 import { useEffect, useState } from 'react';
+import { Box, CircularProgress, MenuItem, Select, Typography } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
+import StorageRoundedIcon from '@mui/icons-material/StorageRounded';
+import CloudOutlinedIcon from '@mui/icons-material/CloudOutlined';
+import { tokens } from '../theme';
 import { setPreferredDatabaseType } from '../db';
 import { createRepositoryFromEnv } from '../db/repositories/repositoryFactory';
 
 type DbType = 'local' | 'turso';
 
 export default function DatabaseIndicator() {
+  const theme = useTheme();
+  const t = tokens[theme.palette.mode];
   const [dbType, setDbType] = useState<DbType>(() => {
     try {
       const preferred = localStorage.getItem('preferred_db_type') as DbType | null;
@@ -27,9 +34,9 @@ export default function DatabaseIndicator() {
 
   useEffect(() => {
     const handler = (e: any) => {
-      const t = e?.detail?.type as DbType | undefined;
-      if (t === 'local' || t === 'turso') {
-        setDbType(t);
+      const nextType = e?.detail?.type as DbType | undefined;
+      if (nextType === 'local' || nextType === 'turso') {
+        setDbType(nextType);
         // Mostrar loader mientras cambia desde otro lugar de la app
         setIsSwitching(true);
         // Rechequear conexión cuando cambia el tipo
@@ -94,69 +101,53 @@ export default function DatabaseIndicator() {
     }
   };
 
-  // estilos del chip informativo según tipo
-  // Paleta según tipo de BD
-  const chipClasses = dbType === 'turso'
-    ? 'bg-teal-50 text-teal-700 border-teal-300 dark:bg-teal-900/30 dark:text-teal-200 dark:border-teal-600'
-    : 'bg-gray-100 text-gray-800 border-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600';
-
-  // Color del dot de estado
-  const dotColor = isChecking
-    ? 'bg-yellow-400'
+  // Color del punto de estado
+  const busy = isSwitching || isChecking;
+  const dotColor = busy
+    ? t.warning
     : isConnected === true
-      ? 'bg-green-500'
+      ? t.success
       : isConnected === false
-        ? 'bg-red-500'
-        : 'bg-gray-400';
+        ? t.danger
+        : t.textMuted;
+
+  const options: { value: DbType; label: string; icon: React.ReactNode }[] = [
+    { value: 'local', label: 'Local', icon: <StorageRoundedIcon sx={{ fontSize: '1rem' }} /> },
+    { value: 'turso', label: 'Nube (Turso)', icon: <CloudOutlinedIcon sx={{ fontSize: '1rem' }} /> },
+  ];
 
   return (
-    <div className="flex items-center gap-3">
-      <span
-        className={`inline-flex items-center gap-2 text-xs px-2 py-1 rounded-full border ${chipClasses}`}
-        aria-busy={isSwitching || isChecking}
-        aria-live="polite"
-      >
-        <span className={`w-2.5 h-2.5 rounded-full ${dotColor}`}></span>
-        BD: {label}
-        {(isSwitching || isChecking) && (
-          <span
-            className="ml-1 inline-flex items-center justify-center"
-            title="Cambiando base de datos"
-            aria-label="Cambiando base de datos"
-          >
-            <svg
-              className="animate-spin w-3 h-3 text-current"
-              viewBox="0 0 24 24"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <circle
-                className="opacity-25"
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                strokeWidth="3"
-              />
-              <path
-                className="opacity-75"
-                fill="currentColor"
-                d="M4 12a8 8 0 018-8v3a5 5 0 00-5 5H4z"
-              />
-            </svg>
-          </span>
-        )}
-      </span>
-      {/* Selector clásico para escalar a más tipos */}
-      <select
+    <Box>
+      <Typography variant="overline" sx={{ display: 'block', color: t.textMuted, lineHeight: 1, mb: 1 }}>
+        Datos
+      </Typography>
+      <Select
+        size="small"
+        fullWidth
         value={dbType}
         onChange={(e) => handleChange(e.target.value as DbType)}
-        className={`text-xs px-2 py-1 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 ${(isSwitching || isChecking) ? 'opacity-60 cursor-not-allowed' : ''}`}
-        disabled={isSwitching || isChecking}
+        disabled={busy}
+        aria-label="Tipo de base de datos"
+        aria-busy={busy}
+        renderValue={() => (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, fontSize: '0.8125rem' }} aria-live="polite">
+            <Box
+              component="span"
+              sx={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: dotColor, flexShrink: 0 }}
+            />
+            <Box component="span" sx={{ fontWeight: 600, color: t.textPrimary }}>{label}</Box>
+            {busy && <CircularProgress size={12} thickness={5} sx={{ color: t.textMuted, ml: 'auto' }} />}
+          </Box>
+        )}
+        sx={{ '& .MuiSelect-select': { py: 0.9 } }}
       >
-        <option value="local">Local</option>
-        <option value="turso">Nube (Turso)</option>
-      </select>
-    </div>
+        {options.map((o) => (
+          <MenuItem key={o.value} value={o.value} sx={{ gap: 1 }}>
+            {o.icon}
+            {o.label}
+          </MenuItem>
+        ))}
+      </Select>
+    </Box>
   );
 }

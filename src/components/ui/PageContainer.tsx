@@ -9,7 +9,7 @@ interface PageContainerProps {
 
 export default function PageContainer({
   children,
-  maxWidth = 900,
+  maxWidth = 1200,
   noPadding = false,
 }: PageContainerProps) {
   return (
@@ -17,8 +17,7 @@ export default function PageContainer({
       sx={{
         maxWidth,
         mx: 'auto',
-        px: noPadding ? 0 : { xs: 2, sm: 3, md: 4, lg: 6 },
-        pb: 8, // safe area for bottom nav
+        px: noPadding ? 0 : { xs: 0, sm: 1 },
       }}
     >
       {children}

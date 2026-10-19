@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Box, TextField, Typography, IconButton, CircularProgress } from '@mui/material';
-import SaveIcon from '@mui/icons-material/Save';
+import { Box, TextField, Typography, IconButton, CircularProgress, InputAdornment, Tooltip } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
+import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
 import { CategoryChip } from './ui';
+import { tokens } from '../theme';
+import { formatCurrency } from '../utils/formatters';
 import { getAllBudgets, saveBudget, deleteBudget } from '../db/budgetServices';
 import { CategoryBudget } from '../db/config';
 import { useToast } from '../contexts/ToastContext';
@@ -18,6 +21,8 @@ const CATEGORIES = [
 
 export default function BudgetConfig() {
   const toast = useToast();
+  const theme = useTheme();
+  const t = tokens[theme.palette.mode];
   const [budgets, setBudgets] = useState<Record<string, CategoryBudget>>({});
   const [inputs, setInputs] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<Record<string, boolean>>({});
@@ -72,49 +77,73 @@ export default function BudgetConfig() {
   };
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <Typography variant="body2" sx={{ color: t.textSecondary }}>
         Define un presupuesto mensual para cada categoría. Deja en 0 para eliminar.
       </Typography>
-      {CATEGORIES.map((category) => (
-        <Box
-          key={category}
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1.5,
-          }}
-        >
-          <Box sx={{ minWidth: 130 }}>
-            <CategoryChip category={category} size="medium" />
-          </Box>
-          <TextField
-            type="number"
-            size="small"
-            placeholder="0"
-            value={inputs[category] || ''}
-            onChange={(e) => setInputs((prev) => ({ ...prev, [category]: e.target.value }))}
-            inputProps={{ min: 0, step: 1 }}
-            sx={{ width: 140 }}
-            InputProps={{
-              endAdornment: <Typography variant="caption" color="text.secondary">€</Typography>,
+      <Box sx={{ border: `1px solid ${t.border}`, borderRadius: '12px', overflow: 'hidden' }}>
+        {CATEGORIES.map((category, index) => (
+          <Box
+            key={category}
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 1.5,
+              px: { xs: 1.5, sm: 2 },
+              py: 1.25,
+              borderTop: index === 0 ? 'none' : `1px solid ${t.border}`,
             }}
-          />
-          <IconButton
-            size="small"
-            onClick={() => handleSave(category)}
-            disabled={saving[category]}
-            color="primary"
           >
-            {saving[category] ? <CircularProgress size={16} /> : <SaveIcon fontSize="small" />}
-          </IconButton>
-          {budgets[category]?.monthlyBudget ? (
-            <Typography variant="caption" color="text.secondary">
-              Actual: {budgets[category].monthlyBudget} €
-            </Typography>
-          ) : null}
-        </Box>
-      ))}
+            <Box sx={{ minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.5 }}>
+              <CategoryChip category={category} size="medium" />
+              <Typography variant="caption" sx={{ color: t.textMuted, pl: 0.25 }}>
+                {budgets[category]?.monthlyBudget
+                  ? `Actual: ${formatCurrency(budgets[category].monthlyBudget)}`
+                  : 'Sin presupuesto'}
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexShrink: 0 }}>
+              <TextField
+                type="number"
+                size="small"
+                placeholder="0"
+                value={inputs[category] || ''}
+                onChange={(e) => setInputs((prev) => ({ ...prev, [category]: e.target.value }))}
+                inputProps={{
+                  min: 0,
+                  step: 1,
+                  inputMode: 'decimal',
+                  'aria-label': `Presupuesto mensual de ${category}`,
+                  style: { textAlign: 'right', fontVariantNumeric: 'tabular-nums' },
+                }}
+                sx={{ width: { xs: 112, sm: 140 } }}
+                InputProps={{
+                  endAdornment: <InputAdornment position="end">€</InputAdornment>,
+                }}
+              />
+              <Tooltip title="Guardar">
+                <span>
+                  <IconButton
+                    onClick={() => handleSave(category)}
+                    disabled={saving[category]}
+                    aria-label={`Guardar presupuesto de ${category}`}
+                    sx={{
+                      width: 40,
+                      height: 40,
+                      border: `1px solid ${t.border}`,
+                      color: t.primary,
+                      '&:hover': { color: t.primary, backgroundColor: t.primarySoft },
+                    }}
+                  >
+                    {saving[category] ? <CircularProgress size={16} /> : <CheckRoundedIcon fontSize="small" />}
+                  </IconButton>
+                </span>
+              </Tooltip>
+            </Box>
+          </Box>
+        ))}
+      </Box>
     </Box>
   );
 }

@@ -6,10 +6,12 @@ import {
   IconButton,
   CircularProgress,
   Button,
+  Tooltip,
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
-import AddIcon from '@mui/icons-material/Add';
-import DeleteIcon from '@mui/icons-material/Delete';
+import AddRoundedIcon from '@mui/icons-material/AddRounded';
+import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
+import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
 import { AccountChip } from './ui';
 import {
   getAllAccounts,
@@ -96,20 +98,30 @@ export default function AccountsConfig() {
   };
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <Typography variant="body2" color="text.secondary">
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+      <Typography variant="body2" sx={{ color: t.textSecondary }}>
         Crea las cuentas o métodos de pago (efectivo, tarjetas, bancos…) que
         podrás asignar a cada gasto.
       </Typography>
 
       {/* Lista de cuentas existentes */}
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-        {accounts.length === 0 ? (
-          <Typography variant="caption" color="text.secondary">
+      {accounts.length === 0 ? (
+        <Box
+          sx={{
+            px: 2,
+            py: 2.5,
+            borderRadius: '12px',
+            border: `1px dashed ${t.borderStrong}`,
+            textAlign: 'center',
+          }}
+        >
+          <Typography variant="body2" sx={{ color: t.textMuted }}>
             Aún no has creado ninguna cuenta.
           </Typography>
-        ) : (
-          accounts.map((account) => (
+        </Box>
+      ) : (
+        <Box sx={{ border: `1px solid ${t.border}`, borderRadius: '12px', overflow: 'hidden' }}>
+          {accounts.map((account, index) => (
             <Box
               key={account.id}
               sx={{
@@ -117,44 +129,52 @@ export default function AccountsConfig() {
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 gap: 1,
-                px: 1.5,
-                py: 1,
-                borderRadius: '12px',
-                border: `1px solid ${t.border}`,
-                backgroundColor: t.surface,
+                pl: 2,
+                pr: 1,
+                py: 0.75,
+                borderTop: index === 0 ? 'none' : `1px solid ${t.border}`,
               }}
             >
               <AccountChip name={account.name} color={account.color} size="medium" />
-              <IconButton
-                size="small"
-                onClick={() => account.id && handleDelete(account.id)}
-                disabled={deletingId === account.id}
-                sx={{ color: t.danger }}
-              >
-                {deletingId === account.id ? (
-                  <CircularProgress size={16} />
-                ) : (
-                  <DeleteIcon fontSize="small" />
-                )}
-              </IconButton>
+              <Tooltip title="Eliminar cuenta">
+                <span>
+                  <IconButton
+                    onClick={() => account.id && handleDelete(account.id)}
+                    disabled={deletingId === account.id}
+                    aria-label={`Eliminar cuenta ${account.name}`}
+                    sx={{ width: 40, height: 40, '&:hover': { color: t.danger, backgroundColor: t.dangerSoft } }}
+                  >
+                    {deletingId === account.id ? (
+                      <CircularProgress size={16} />
+                    ) : (
+                      <DeleteOutlineRoundedIcon fontSize="small" />
+                    )}
+                  </IconButton>
+                </span>
+              </Tooltip>
             </Box>
-          ))
-        )}
-      </Box>
+          ))}
+        </Box>
+      )}
 
       {/* Formulario de creación */}
       <Box
         sx={{
           display: 'flex',
           flexDirection: 'column',
-          gap: 1.5,
-          pt: 1,
-          borderTop: `1px solid ${t.border}`,
+          gap: 2,
+          p: 2,
+          borderRadius: '12px',
+          backgroundColor: t.surfaceSoft,
+          border: `1px solid ${t.border}`,
         }}
       >
+        <Typography variant="subtitle2" sx={{ color: t.textPrimary }}>
+          Nueva cuenta
+        </Typography>
         <TextField
           label="Nombre de la cuenta"
-          size="small"
+          placeholder="Ej.: BBVA, Revolut, Efectivo"
           value={name}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => {
@@ -167,35 +187,53 @@ export default function AccountsConfig() {
         />
 
         {/* Selector de color */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-          <Typography variant="caption" color="text.secondary" sx={{ mr: 0.5 }}>
-            Color:
+        <Box>
+          <Typography variant="caption" component="p" sx={{ color: t.textSecondary, fontWeight: 500, mb: 1 }}>
+            Color
           </Typography>
-          {COLOR_OPTIONS.map((c) => (
-            <Box
-              key={c}
-              onClick={() => setColor(c)}
-              sx={{
-                width: 24,
-                height: 24,
-                borderRadius: '50%',
-                backgroundColor: c,
-                cursor: 'pointer',
-                border: color === c ? `2px solid ${t.textPrimary}` : '2px solid transparent',
-                boxShadow: color === c ? `0 0 0 2px ${c}55` : 'none',
-                transition: 'transform 0.1s',
-                '&:hover': { transform: 'scale(1.15)' },
-              }}
-            />
-          ))}
+          <Box role="radiogroup" aria-label="Color de la cuenta" sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            {COLOR_OPTIONS.map((c) => {
+              const selected = color === c;
+              return (
+                <Box
+                  key={c}
+                  component="button"
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  aria-label={`Color ${c}`}
+                  onClick={() => setColor(c)}
+                  sx={{
+                    all: 'unset',
+                    boxSizing: 'border-box',
+                    width: 36,
+                    height: 36,
+                    borderRadius: '50%',
+                    backgroundColor: c,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#fff',
+                    boxShadow: selected ? `0 0 0 2px ${t.surfaceSoft}, 0 0 0 4px ${c}` : 'none',
+                    transition: 'transform 0.12s, box-shadow 0.12s',
+                    '&:hover': { transform: 'scale(1.08)' },
+                    '&:focus-visible': { outline: `2px solid ${t.primary}`, outlineOffset: 3 },
+                  }}
+                >
+                  {selected && <CheckRoundedIcon sx={{ fontSize: '1.1rem' }} />}
+                </Box>
+              );
+            })}
+          </Box>
         </Box>
 
         <Button
           variant="contained"
           onClick={handleAdd}
           disabled={saving}
-          startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <AddIcon />}
-          sx={{ borderRadius: '12px', alignSelf: 'flex-start' }}
+          startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <AddRoundedIcon />}
+          sx={{ alignSelf: { xs: 'stretch', sm: 'flex-start' } }}
         >
           Añadir cuenta
         </Button>

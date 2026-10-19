@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import type { ReactNode } from 'react';
 import {
   Box,
   TextField,
@@ -9,17 +10,20 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
-  Divider,
+  IconButton,
+  InputAdornment,
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import StorageIcon from '@mui/icons-material/Storage';
-import CloudSyncIcon from '@mui/icons-material/CloudSync';
-import TableViewIcon from '@mui/icons-material/TableView';
-import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
-import CreditCardIcon from '@mui/icons-material/CreditCard';
-import NotificationsIcon from '@mui/icons-material/Notifications';
-import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import ExpandMoreRoundedIcon from '@mui/icons-material/ExpandMoreRounded';
+import StorageOutlinedIcon from '@mui/icons-material/StorageOutlined';
+import CloudSyncOutlinedIcon from '@mui/icons-material/CloudSyncOutlined';
+import TableViewOutlinedIcon from '@mui/icons-material/TableViewOutlined';
+import AccountBalanceWalletOutlinedIcon from '@mui/icons-material/AccountBalanceWalletOutlined';
+import CreditCardOutlinedIcon from '@mui/icons-material/CreditCardOutlined';
+import NotificationsNoneOutlinedIcon from '@mui/icons-material/NotificationsNoneOutlined';
+import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
+import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
 import { validateGoogleSheetsConfig } from '../db/googleSheetsService';
 import { getGoogleSheetsConfig, saveGoogleSheetsConfig } from '../db';
 import DatabaseBackup from './DatabaseBackup';
@@ -28,7 +32,71 @@ import BudgetConfig from './BudgetConfig';
 import AccountsConfig from './AccountsConfig';
 import NotificationSettings from './NotificationSettings';
 import AIConfig from './AIConfig';
+import { PageHeader } from './ui';
 import { tokens } from '../theme';
+
+interface SettingsSectionProps {
+  icon: ReactNode;
+  title: string;
+  description: string;
+  children: ReactNode;
+  defaultExpanded?: boolean;
+}
+
+// Bloque plegable de ajustes: icono en cuadradito tintado, título y una línea de descripción
+function SettingsSection({ icon, title, description, children, defaultExpanded }: SettingsSectionProps) {
+  const theme = useTheme();
+  const t = tokens[theme.palette.mode];
+
+  return (
+    <Accordion defaultExpanded={defaultExpanded}>
+      <AccordionSummary
+        expandIcon={<ExpandMoreRoundedIcon sx={{ color: t.textMuted }} />}
+        sx={{ '& .MuiAccordionSummary-content': { alignItems: 'center', gap: 1.75, minWidth: 0 } }}
+      >
+        <Box
+          sx={{
+            width: 36,
+            height: 36,
+            borderRadius: '10px',
+            backgroundColor: t.primarySoft,
+            color: t.primary,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+            '& svg': { fontSize: '1.2rem' },
+          }}
+        >
+          {icon}
+        </Box>
+        <Box sx={{ minWidth: 0 }}>
+          <Typography variant="subtitle1" component="h3" sx={{ color: t.textPrimary, lineHeight: 1.3 }}>
+            {title}
+          </Typography>
+          <Typography variant="caption" component="p" sx={{ color: t.textMuted, lineHeight: 1.35 }}>
+            {description}
+          </Typography>
+        </Box>
+      </AccordionSummary>
+      <AccordionDetails sx={{ pt: 2.5 }}>{children}</AccordionDetails>
+    </Accordion>
+  );
+}
+
+function SettingsGroup({ label, children }: { label: string; children: ReactNode }) {
+  const theme = useTheme();
+  const t = tokens[theme.palette.mode];
+
+  return (
+    <Box component="section" sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+      <Typography variant="overline" component="h2" sx={{ color: t.textMuted, px: 0.5 }}>
+        {label}
+      </Typography>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>{children}</Box>
+    </Box>
+  );
+}
 
 interface GoogleSheetsConfig {
   clientId: string;
@@ -42,9 +110,6 @@ interface GoogleSheetsConfig {
 }
 
 export default function GoogleSheetsConfig() {
-  const muiTheme = useTheme();
-  const t = tokens[muiTheme.palette.mode];
-
   const [config, setConfig] = useState<GoogleSheetsConfig>({
     clientId: import.meta.env.VITE_GOOGLE_CLIENT_ID || '',
     clientSecret: import.meta.env.VITE_GOOGLE_CLIENT_SECRET || '',
@@ -59,6 +124,7 @@ export default function GoogleSheetsConfig() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [authWindow, setAuthWindow] = useState<Window | null>(null);
+  const [showSecret, setShowSecret] = useState(false);
 
   useEffect(() => {
     loadConfig();
@@ -173,243 +239,151 @@ export default function GoogleSheetsConfig() {
     }
   };
 
-  const sectionHeaderSx = {
-    '& .MuiAccordionSummary-content': {
-      alignItems: 'center',
-      gap: 1.5,
-    },
-  };
-
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>
-        Configuración
-      </Typography>
+    <Box sx={{ maxWidth: 960 }}>
+      <PageHeader
+        title="Configuración"
+        subtitle="Presupuestos, cuentas, asistentes y dónde se guardan tus datos."
+      />
 
-      {/* Presupuesto por categoría */}
-      <Accordion
-        disableGutters
-        elevation={0}
-        sx={{
-          border: `1px solid ${t.border}`,
-          borderRadius: '16px !important',
-          '&:before': { display: 'none' },
-          overflow: 'hidden',
-        }}
-      >
-        <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={sectionHeaderSx}>
-          <AccountBalanceWalletIcon sx={{ color: t.warning, fontSize: '1.25rem' }} />
-          <Typography variant="body1" sx={{ fontWeight: 600 }}>
-            Presupuesto por categoría
-          </Typography>
-        </AccordionSummary>
-        <Divider />
-        <AccordionDetails sx={{ p: 2 }}>
-          <BudgetConfig />
-        </AccordionDetails>
-      </Accordion>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3.5 }}>
+        <SettingsGroup label="Finanzas">
+          <SettingsSection
+            icon={<AccountBalanceWalletOutlinedIcon />}
+            title="Presupuesto por categoría"
+            description="Límite mensual de gasto para cada categoría."
+          >
+            <BudgetConfig />
+          </SettingsSection>
 
-      {/* Cuentas / métodos de pago */}
-      <Accordion
-        disableGutters
-        elevation={0}
-        sx={{
-          border: `1px solid ${t.border}`,
-          borderRadius: '16px !important',
-          '&:before': { display: 'none' },
-          overflow: 'hidden',
-        }}
-      >
-        <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={sectionHeaderSx}>
-          <CreditCardIcon sx={{ color: t.primary, fontSize: '1.25rem' }} />
-          <Typography variant="body1" sx={{ fontWeight: 600 }}>
-            Cuentas
-          </Typography>
-        </AccordionSummary>
-        <Divider />
-        <AccordionDetails sx={{ p: 2 }}>
-          <AccountsConfig />
-        </AccordionDetails>
-      </Accordion>
+          <SettingsSection
+            icon={<CreditCardOutlinedIcon />}
+            title="Cuentas"
+            description="Bancos, tarjetas o efectivo con los que pagas cada gasto."
+          >
+            <AccountsConfig />
+          </SettingsSection>
+        </SettingsGroup>
 
-      {/* Recordatorios */}
-      <Accordion
-        disableGutters
-        elevation={0}
-        sx={{
-          border: `1px solid ${t.border}`,
-          borderRadius: '16px !important',
-          '&:before': { display: 'none' },
-          overflow: 'hidden',
-        }}
-      >
-        <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={sectionHeaderSx}>
-          <NotificationsIcon sx={{ color: t.info, fontSize: '1.25rem' }} />
-          <Typography variant="body1" sx={{ fontWeight: 600 }}>
-            Recordatorios de pagos
-          </Typography>
-        </AccordionSummary>
-        <Divider />
-        <AccordionDetails sx={{ p: 2 }}>
-          <NotificationSettings />
-        </AccordionDetails>
-      </Accordion>
+        <SettingsGroup label="Asistentes">
+          <SettingsSection
+            icon={<NotificationsNoneOutlinedIcon />}
+            title="Recordatorios de pagos"
+            description="Avisos del navegador antes de cada pago recurrente."
+          >
+            <NotificationSettings />
+          </SettingsSection>
 
-      {/* Inteligencia Artificial */}
-      <Accordion
-        disableGutters
-        elevation={0}
-        sx={{
-          border: `1px solid ${t.border}`,
-          borderRadius: '16px !important',
-          '&:before': { display: 'none' },
-          overflow: 'hidden',
-        }}
-      >
-        <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={sectionHeaderSx}>
-          <AutoAwesomeIcon sx={{ color: t.warning, fontSize: '1.25rem' }} />
-          <Typography variant="body1" sx={{ fontWeight: 600 }}>
-            Inteligencia Artificial
-          </Typography>
-        </AccordionSummary>
-        <Divider />
-        <AccordionDetails sx={{ p: 2 }}>
-          <AIConfig />
-        </AccordionDetails>
-      </Accordion>
+          <SettingsSection
+            icon={<AutoAwesomeOutlinedIcon />}
+            title="Inteligencia artificial"
+            description="Escanea tickets con Claude para rellenar los gastos."
+          >
+            <AIConfig />
+          </SettingsSection>
+        </SettingsGroup>
 
-      {/* Base de datos */}
-      <Accordion
-        defaultExpanded
-        disableGutters
-        elevation={0}
-        sx={{
-          border: `1px solid ${t.border}`,
-          borderRadius: '16px !important',
-          '&:before': { display: 'none' },
-          overflow: 'hidden',
-        }}
-      >
-        <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={sectionHeaderSx}>
-          <StorageIcon sx={{ color: t.primary, fontSize: '1.25rem' }} />
-          <Typography variant="body1" sx={{ fontWeight: 600 }}>
-            Base de datos y Backup
-          </Typography>
-        </AccordionSummary>
-        <Divider />
-        <AccordionDetails sx={{ p: 2 }}>
-          <DatabaseBackup />
-        </AccordionDetails>
-      </Accordion>
+        <SettingsGroup label="Datos y sincronización">
+          <SettingsSection
+            icon={<StorageOutlinedIcon />}
+            title="Base de datos y copia de seguridad"
+            description="Almacenamiento local o en la nube, backups y mantenimiento."
+            defaultExpanded
+          >
+            <DatabaseBackup />
+          </SettingsSection>
 
-      {/* Google Sheets sync */}
-      <Accordion
-        disableGutters
-        elevation={0}
-        sx={{
-          border: `1px solid ${t.border}`,
-          borderRadius: '16px !important',
-          '&:before': { display: 'none' },
-          overflow: 'hidden',
-        }}
-      >
-        <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={sectionHeaderSx}>
-          <CloudSyncIcon sx={{ color: t.info, fontSize: '1.25rem' }} />
-          <Typography variant="body1" sx={{ fontWeight: 600 }}>
-            Sincronización
-          </Typography>
-        </AccordionSummary>
-        <Divider />
-        <AccordionDetails sx={{ p: 2 }}>
-          <GoogleSheetsSync />
-        </AccordionDetails>
-      </Accordion>
+          <SettingsSection
+            icon={<CloudSyncOutlinedIcon />}
+            title="Sincronización con Google Sheets"
+            description="Exporta e importa tus datos desde una hoja de cálculo."
+          >
+            <GoogleSheetsSync />
+          </SettingsSection>
 
-      {/* Google Sheets credentials */}
-      <Accordion
-        disableGutters
-        elevation={0}
-        sx={{
-          border: `1px solid ${t.border}`,
-          borderRadius: '16px !important',
-          '&:before': { display: 'none' },
-          overflow: 'hidden',
-        }}
-      >
-        <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={sectionHeaderSx}>
-          <TableViewIcon sx={{ color: t.success, fontSize: '1.25rem' }} />
-          <Typography variant="body1" sx={{ fontWeight: 600 }}>
-            Google Sheets
-          </Typography>
-        </AccordionSummary>
-        <Divider />
-        <AccordionDetails sx={{ p: 2 }}>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            {error && <Alert severity="error">{error}</Alert>}
-            {success && <Alert severity="success">{success}</Alert>}
+          <SettingsSection
+            icon={<TableViewOutlinedIcon />}
+            title="Conexión con Google Sheets"
+            description="Credenciales OAuth y hoja de cálculo de destino."
+          >
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+              {error && <Alert severity="error">{error}</Alert>}
+              {success && <Alert severity="success">{success}</Alert>}
 
-            <Box
-              sx={{
-                display: 'grid',
-                gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
-                gap: 2,
-              }}
-            >
-              <TextField
-                label="ID de cliente"
-                value={config.clientId}
-                onChange={(e) => setConfig({ ...config, clientId: e.target.value })}
-                fullWidth
-              />
-              <TextField
-                label="Secreto de cliente"
-                value={config.clientSecret}
-                onChange={(e) => setConfig({ ...config, clientSecret: e.target.value })}
-                fullWidth
-              />
-              <TextField
-                label="ID de la hoja de cálculo"
-                value={config.spreadsheetId}
-                onChange={(e) => setConfig({ ...config, spreadsheetId: e.target.value })}
-                fullWidth
-              />
-              <TextField
-                label="Nombre de la hoja"
-                value={config.sheetName}
-                onChange={(e) => setConfig({ ...config, sheetName: e.target.value })}
-                fullWidth
-              />
-            </Box>
-
-            <Box
-              sx={{
-                display: 'grid',
-                gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
-                gap: 2,
-              }}
-            >
-              <Button
-                variant="contained"
-                onClick={handleAuthClick}
-                disabled={isLoading}
-                startIcon={isLoading ? <CircularProgress size={18} /> : undefined}
-                sx={{ borderRadius: '12px' }}
+              <Box
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+                  gap: 2,
+                }}
               >
-                Autenticar con Google
-              </Button>
-              <Button
-                variant="outlined"
-                onClick={saveConfig}
-                disabled={isLoading}
-                startIcon={isLoading ? <CircularProgress size={18} /> : undefined}
-                sx={{ borderRadius: '12px' }}
-              >
-                Guardar configuración
-              </Button>
+                <TextField
+                  label="ID de cliente"
+                  value={config.clientId}
+                  onChange={(e) => setConfig({ ...config, clientId: e.target.value })}
+                  fullWidth
+                />
+                <TextField
+                  label="Secreto de cliente"
+                  type={showSecret ? 'text' : 'password'}
+                  value={config.clientSecret}
+                  onChange={(e) => setConfig({ ...config, clientSecret: e.target.value })}
+                  fullWidth
+                  autoComplete="off"
+                  InputProps={{
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton
+                          edge="end"
+                          onClick={() => setShowSecret((v) => !v)}
+                          aria-label={showSecret ? 'Ocultar secreto' : 'Mostrar secreto'}
+                        >
+                          {showSecret ? (
+                            <VisibilityOffOutlinedIcon fontSize="small" />
+                          ) : (
+                            <VisibilityOutlinedIcon fontSize="small" />
+                          )}
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+                <TextField
+                  label="ID de la hoja de cálculo"
+                  value={config.spreadsheetId}
+                  onChange={(e) => setConfig({ ...config, spreadsheetId: e.target.value })}
+                  fullWidth
+                />
+                <TextField
+                  label="Nombre de la hoja"
+                  value={config.sheetName}
+                  onChange={(e) => setConfig({ ...config, sheetName: e.target.value })}
+                  fullWidth
+                />
+              </Box>
+
+              <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', flexDirection: { xs: 'column', sm: 'row' } }}>
+                <Button
+                  variant="contained"
+                  onClick={handleAuthClick}
+                  disabled={isLoading}
+                  startIcon={isLoading ? <CircularProgress size={16} color="inherit" /> : undefined}
+                >
+                  Autenticar con Google
+                </Button>
+                <Button
+                  variant="outlined"
+                  onClick={saveConfig}
+                  disabled={isLoading}
+                  startIcon={isLoading ? <CircularProgress size={16} color="inherit" /> : undefined}
+                >
+                  Guardar configuración
+                </Button>
+              </Box>
             </Box>
-          </Box>
-        </AccordionDetails>
-      </Accordion>
+          </SettingsSection>
+        </SettingsGroup>
+      </Box>
     </Box>
   );
 }

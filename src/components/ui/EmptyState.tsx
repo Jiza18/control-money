@@ -21,37 +21,39 @@ export default function EmptyState({ icon, title, description, action }: EmptySt
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        p: 6,
+        px: 3,
+        py: 6,
         textAlign: 'center',
-        gap: 2,
+        gap: 1,
       }}
     >
       {icon && (
         <Box
           sx={{
-            fontSize: '48px',
-            color: t.textMuted,
+            width: 56,
+            height: 56,
+            mb: 1,
+            borderRadius: '16px',
+            backgroundColor: t.primarySoft,
+            color: t.primary,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            '& svg': { fontSize: '48px' },
+            '& svg': { fontSize: '28px' },
           }}
         >
           {icon}
         </Box>
       )}
-      <Typography
-        variant="body1"
-        sx={{ fontWeight: 600, color: t.textPrimary }}
-      >
+      <Typography variant="subtitle1" sx={{ color: t.textPrimary }}>
         {title}
       </Typography>
       {description && (
-        <Typography variant="caption" sx={{ color: t.textMuted }}>
+        <Typography variant="body2" sx={{ color: t.textSecondary, maxWidth: 360 }}>
           {description}
         </Typography>
       )}
-      {action && <Box sx={{ mt: 1 }}>{action}</Box>}
+      {action && <Box sx={{ mt: 1.5 }}>{action}</Box>}
     </Box>
   );
 }

@@ -1,4 +1,5 @@
 import {
+  Box,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -7,6 +8,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
+import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded';
 import { tokens } from '../../theme';
 
 interface ConfirmDialogProps {
@@ -35,7 +37,26 @@ export default function ConfirmDialog({
 
   return (
     <Dialog open={open} onClose={onCancel} maxWidth="xs" fullWidth>
-      <DialogTitle sx={{ fontWeight: 700 }}>{title}</DialogTitle>
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5, pt: 3 }}>
+        {destructive && (
+          <Box
+            sx={{
+              width: 36,
+              height: 36,
+              borderRadius: '10px',
+              backgroundColor: t.dangerSoft,
+              color: t.danger,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            <WarningAmberRoundedIcon fontSize="small" />
+          </Box>
+        )}
+        {title}
+      </DialogTitle>
       {description && (
         <DialogContent>
           <Typography variant="body2" sx={{ color: t.textSecondary }}>
@@ -43,25 +64,14 @@ export default function ConfirmDialog({
           </Typography>
         </DialogContent>
       )}
-      <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
-        <Button
-          onClick={onCancel}
-          variant="outlined"
-          sx={{ borderRadius: 3 }}
-        >
+      <DialogActions>
+        <Button onClick={onCancel} variant="outlined" color="inherit">
           {cancelLabel}
         </Button>
         <Button
           onClick={onConfirm}
           variant="contained"
-          sx={{
-            borderRadius: 3,
-            ...(destructive && {
-              backgroundColor: t.danger,
-              color: '#fff',
-              '&:hover': { backgroundColor: '#b91c1c' },
-            }),
-          }}
+          color={destructive ? 'error' : 'primary'}
         >
           {confirmLabel}
         </Button>

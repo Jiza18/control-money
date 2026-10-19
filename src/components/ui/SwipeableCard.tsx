@@ -1,6 +1,6 @@
 import { useRef, useState, ReactNode } from 'react';
 import { Box, IconButton } from '@mui/material';
-import DeleteIcon from '@mui/icons-material/Delete';
+import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
 
 interface SwipeableCardProps {
   onDelete: () => void;
@@ -38,7 +38,7 @@ export default function SwipeableCard({ onDelete, children, disabled = false }: 
   };
 
   return (
-    <Box sx={{ position: 'relative', overflow: 'hidden', borderRadius: '20px', mb: 1 }}>
+    <Box sx={{ position: 'relative', overflow: 'hidden', borderRadius: '14px', mb: 1.25 }}>
       {/* Red delete background */}
       <Box
         sx={{
@@ -51,15 +51,19 @@ export default function SwipeableCard({ onDelete, children, disabled = false }: 
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          borderRadius: '20px',
+          borderRadius: '14px',
+          // Oculto en reposo para que no asome por las esquinas redondeadas de la tarjeta
+          opacity: translateX < 0 ? 1 : 0,
+          transition: 'opacity 0.15s',
         }}
       >
         <IconButton
           onClick={onDelete}
-          sx={{ color: '#fff' }}
+          sx={{ color: '#fff', '&:hover': { color: '#fff', backgroundColor: 'rgba(255,255,255,0.15)' } }}
           size="small"
+          aria-label="Eliminar"
         >
-          <DeleteIcon />
+          <DeleteOutlineRoundedIcon />
         </IconButton>
       </Box>
 

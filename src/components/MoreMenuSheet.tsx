@@ -13,6 +13,8 @@ import {
   Chip
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
+import LightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined';
+import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined';
 import SettingsIcon from '@mui/icons-material/Settings';
 // Removed unused icons for actions we no longer show
 import CloudIcon from '@mui/icons-material/Cloud';
@@ -66,18 +68,7 @@ const MoreMenuSheet: React.FC<MoreMenuSheetProps> = ({ open, onClose, currentThe
               title={currentTheme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
               onClick={onToggleTheme}
             >
-              {currentTheme === 'dark' ? (
-                // Icono de sol (mismo SVG que en desktop)
-                <svg className="w-6 h-6 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v2m0 14v2m9-9h-2M5 12H3m15.364 6.364l-1.414-1.414M6.05 6.05L4.636 4.636m12.728 0l-1.414 1.414M6.05 17.95l-1.414 1.414" />
-                  <circle cx="12" cy="12" r="4" strokeWidth="2" />
-                </svg>
-              ) : (
-                // Icono de luna (mismo SVG que en desktop)
-                <svg className="w-6 h-6 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12.79A9 9 0 1111.21 3a7 7 0 009.79 9.79z" />
-                </svg>
-              )}
+              {currentTheme === 'dark' ? <LightModeOutlinedIcon /> : <DarkModeOutlinedIcon />}
             </IconButton>
             <IconButton aria-label="Cerrar" onClick={onClose}>
               <CloseIcon />

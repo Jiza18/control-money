@@ -2,30 +2,47 @@ import { useState, useEffect, useRef } from 'react';
 import { Expense } from '../db/config';
 import {
   Box,
+  Button,
   Fab,
   Tooltip,
-  Chip,
   Typography,
+  IconButton,
   List,
   ListItemButton,
   ListItemIcon,
   ListItemText,
   CircularProgress,
   Backdrop,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  ToggleButton,
+  ToggleButtonGroup,
+  useMediaQuery,
 } from '@mui/material';
-import AddIcon from '@mui/icons-material/Add';
-import EditNoteIcon from '@mui/icons-material/EditNote';
-import CameraAltIcon from '@mui/icons-material/CameraAlt';
+import { useTheme } from '@mui/material/styles';
+import AddRoundedIcon from '@mui/icons-material/AddRounded';
+import EditNoteRoundedIcon from '@mui/icons-material/EditNoteRounded';
+import PhotoCameraOutlinedIcon from '@mui/icons-material/PhotoCameraOutlined';
+import ChevronLeftRoundedIcon from '@mui/icons-material/ChevronLeftRounded';
+import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
+import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined';
+import { format, addMonths, subMonths } from 'date-fns';
+import { es } from 'date-fns/locale';
 import ExpenseList from './ExpenseList';
 import ExpenseForm from './ExpenseForm';
 import AnnualOverview from './AnnualOverview';
-import { BottomSheet } from './ui';
+import { BottomSheet, PageHeader } from './ui';
+import { tokens } from '../theme';
 import { getAIConfig } from '../db/aiConfigService';
 import { resizeImage, parseReceiptWithAI, type ParsedReceipt } from '../services/aiReceiptParser';
 import { useToast } from '../contexts/ToastContext';
 
 export default function Expenses() {
   const toast = useToast();
+  const muiTheme = useTheme();
+  const t = tokens[muiTheme.palette.mode];
+  const isMobile = useMediaQuery(muiTheme.breakpoints.down('lg'));
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [isExpenseFormOpen, setIsExpenseFormOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'monthly' | 'annual'>('monthly');
@@ -105,42 +122,155 @@ export default function Expenses() {
     }
   };
 
+  const isCurrentMonthView =
+    currentMonth.getFullYear() === new Date().getFullYear() &&
+    currentMonth.getMonth() === new Date().getMonth();
+
+  const monthLabel = format(currentMonth, 'MMMM yyyy', { locale: es }).replace(/^\w/, (c) =>
+    c.toUpperCase()
+  );
+
+  const choiceList = (
+    <List disablePadding sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+      {[
+        {
+          key: 'manual',
+          onClick: openManual,
+          icon: <EditNoteRoundedIcon />,
+          fg: t.primary,
+          bg: t.primarySoft,
+          primary: 'Añadir manualmente',
+          secondary: 'Rellena el formulario tú mismo',
+        },
+        {
+          key: 'camera',
+          onClick: openCamera,
+          icon: <PhotoCameraOutlinedIcon />,
+          fg: t.warning,
+          bg: t.warningSoft,
+          primary: 'Escanear ticket',
+          secondary: 'Toma una foto y la IA rellena el gasto',
+        },
+      ].map((item) => (
+        <ListItemButton
+          key={item.key}
+          onClick={item.onClick}
+          sx={{
+            borderRadius: '12px',
+            border: `1px solid ${t.border}`,
+            px: 1.5,
+            py: 1.25,
+            gap: 1.5,
+          }}
+        >
+          <ListItemIcon
+            sx={{
+              minWidth: 0,
+              width: 40,
+              height: 40,
+              borderRadius: '10px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: item.fg,
+              backgroundColor: item.bg,
+            }}
+          >
+            {item.icon}
+          </ListItemIcon>
+          <ListItemText
+            primary={item.primary}
+            secondary={item.secondary}
+            primaryTypographyProps={{ fontWeight: 600, fontSize: '0.9375rem' }}
+            secondaryTypographyProps={{ fontSize: '0.8125rem' }}
+          />
+          <ChevronRightRoundedIcon sx={{ color: t.textMuted }} />
+        </ListItemButton>
+      ))}
+    </List>
+  );
+
   return (
     <Box>
-      {/* Header */}
-      <Box
-        sx={{
-          mb: 3,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: 1.5,
-        }}
-      >
-        <Typography variant="h5" sx={{ fontWeight: 700 }}>
-          Gastos
-        </Typography>
-
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <Chip
-            label="Vista Mensual"
-            onClick={() => setViewMode('monthly')}
-            variant={viewMode === 'monthly' ? 'filled' : 'outlined'}
-            color={viewMode === 'monthly' ? 'primary' : 'default'}
-            size="small"
-            sx={{ fontWeight: 600, cursor: 'pointer' }}
-          />
-          <Chip
-            label="Vista Anual"
-            onClick={() => setViewMode('annual')}
-            variant={viewMode === 'annual' ? 'filled' : 'outlined'}
-            color={viewMode === 'annual' ? 'primary' : 'default'}
-            size="small"
-            sx={{ fontWeight: 600, cursor: 'pointer' }}
-          />
-        </Box>
-      </Box>
+      <PageHeader
+        title="Gastos"
+        subtitle={
+          viewMode === 'monthly'
+            ? isCurrentMonthView
+              ? 'Tus pagos de este mes, de un vistazo'
+              : `Gastos previstos para ${monthLabel.toLowerCase()}`
+            : 'Evolución de tus gastos a lo largo del año'
+        }
+        actions={
+          <>
+            {viewMode === 'monthly' && (
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  height: 40,
+                  borderRadius: '10px',
+                  border: `1px solid ${t.border}`,
+                  backgroundColor: t.surface,
+                  boxShadow: t.shadowSm,
+                  px: 0.25,
+                }}
+              >
+                <Tooltip title="Mes anterior">
+                  <IconButton
+                    size="small"
+                    aria-label="Mes anterior"
+                    onClick={() => handleMonthChange(subMonths(currentMonth, 1))}
+                    sx={{ width: 34, height: 34 }}
+                  >
+                    <ChevronLeftRoundedIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                <Box
+                  sx={{ display: 'flex', alignItems: 'center', gap: 0.75, px: { xs: 0.5, sm: 1 }, minWidth: { xs: 112, sm: 136 }, justifyContent: 'center' }}
+                  aria-live="polite"
+                >
+                  <CalendarMonthOutlinedIcon sx={{ fontSize: '1rem', color: t.textMuted, display: { xs: 'none', sm: 'block' } }} />
+                  <Typography sx={{ fontWeight: 600, fontSize: '0.875rem', color: t.textPrimary, whiteSpace: 'nowrap' }}>
+                    {monthLabel}
+                  </Typography>
+                </Box>
+                <Tooltip title="Mes siguiente">
+                  <IconButton
+                    size="small"
+                    aria-label="Mes siguiente"
+                    onClick={() => handleMonthChange(addMonths(currentMonth, 1))}
+                    sx={{ width: 34, height: 34 }}
+                  >
+                    <ChevronRightRoundedIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </Box>
+            )}
+            <ToggleButtonGroup
+              exclusive
+              size="small"
+              value={viewMode}
+              onChange={(_, value: 'monthly' | 'annual' | null) => value && setViewMode(value)}
+              aria-label="Tipo de vista"
+            >
+              <ToggleButton value="monthly" aria-label="Vista mensual">Mensual</ToggleButton>
+              <ToggleButton value="annual" aria-label="Vista anual">Anual</ToggleButton>
+            </ToggleButtonGroup>
+            {/* En escritorio la acción principal va en la cabecera; en móvil, en el FAB */}
+            {!isMobile && viewMode === 'monthly' && (
+              <Button
+                variant="contained"
+                startIcon={<AddRoundedIcon />}
+                onClick={() => setChoiceOpen(true)}
+                aria-label="Añadir gasto"
+              >
+                Añadir gasto
+              </Button>
+            )}
+          </>
+        }
+      />
 
       {viewMode === 'monthly' ? (
         <>
@@ -162,72 +292,47 @@ export default function Expenses() {
           />
 
           {/* Processing overlay */}
-          <Backdrop open={isProcessing} sx={{ zIndex: 1400, flexDirection: 'column', gap: 2 }}>
+          <Backdrop open={isProcessing} sx={{ zIndex: 1400, flexDirection: 'column', gap: 2, color: 'common.white' }}>
             <CircularProgress color="inherit" />
-            <Typography variant="body2" sx={{ color: '#fff' }}>
+            <Typography variant="body2" sx={{ color: 'common.white', fontWeight: 500 }}>
               Analizando ticket…
             </Typography>
           </Backdrop>
 
-          {/* FAB */}
-          <Tooltip title="Añadir gasto" placement="left">
+          {/* FAB (móvil y tablet) */}
+          {isMobile && (
             <Fab
+              color="primary"
               aria-label="Añadir gasto"
-              size="small"
               onClick={() => setChoiceOpen(true)}
               sx={{
                 position: 'fixed',
-                right: 'calc(env(safe-area-inset-right) + 16px)',
-                bottom: 'calc(var(--bottom-nav-height) + env(safe-area-inset-bottom) - 16px)',
+                right: 'calc(env(safe-area-inset-right) + 20px)',
+                bottom: 'calc(64px + env(safe-area-inset-bottom) + 16px)',
                 zIndex: 1000,
-                width: 40,
-                height: 40,
-                minWidth: 40,
-                minHeight: 40,
-                background: 'linear-gradient(90deg, #10B981, #059669)',
-                color: '#fff',
-                boxShadow: '0 8px 20px rgba(16, 185, 129, 0.35)',
-                border: '1px solid rgba(255,255,255,0.25)',
-                '&:hover': {
-                  background: 'linear-gradient(90deg, #059669, #047857)',
-                  boxShadow: '0 10px 24px rgba(5, 150, 105, 0.45)',
-                },
+                width: 56,
+                height: 56,
               }}
             >
-              <AddIcon fontSize="small" />
+              <AddRoundedIcon />
             </Fab>
-          </Tooltip>
+          )}
 
-          {/* Choice bottom sheet */}
-          <BottomSheet
-            open={choiceOpen}
-            onClose={() => setChoiceOpen(false)}
-            title="Añadir gasto"
-          >
-            <List disablePadding>
-              <ListItemButton onClick={openManual} sx={{ borderRadius: 2, mb: 0.5 }}>
-                <ListItemIcon sx={{ minWidth: 40 }}>
-                  <EditNoteIcon color="primary" />
-                </ListItemIcon>
-                <ListItemText
-                  primary="Añadir manualmente"
-                  secondary="Rellena el formulario tú mismo"
-                  primaryTypographyProps={{ fontWeight: 600 }}
-                />
-              </ListItemButton>
-
-              <ListItemButton onClick={openCamera} sx={{ borderRadius: 2 }}>
-                <ListItemIcon sx={{ minWidth: 40 }}>
-                  <CameraAltIcon sx={{ color: '#F59E0B' }} />
-                </ListItemIcon>
-                <ListItemText
-                  primary="Escanear ticket"
-                  secondary="Toma una foto y la IA rellena el gasto"
-                  primaryTypographyProps={{ fontWeight: 600 }}
-                />
-              </ListItemButton>
-            </List>
-          </BottomSheet>
+          {/* Choice: bottom sheet en móvil, diálogo en escritorio */}
+          {isMobile ? (
+            <BottomSheet
+              open={choiceOpen}
+              onClose={() => setChoiceOpen(false)}
+              title="Añadir gasto"
+            >
+              {choiceList}
+            </BottomSheet>
+          ) : (
+            <Dialog open={choiceOpen} onClose={() => setChoiceOpen(false)} maxWidth="xs" fullWidth>
+              <DialogTitle>Añadir gasto</DialogTitle>
+              <DialogContent sx={{ pb: 3 }}>{choiceList}</DialogContent>
+            </Dialog>
+          )}
 
           <ExpenseForm
             open={isExpenseFormOpen}

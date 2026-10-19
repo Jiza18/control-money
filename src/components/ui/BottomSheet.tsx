@@ -30,36 +30,21 @@ export default function BottomSheet({
       disableSwipeToOpen
       PaperProps={{
         sx: {
-          borderRadius: '24px 24px 0 0',
+          borderRadius: '20px 20px 0 0',
           maxHeight,
           backgroundColor: t.surface,
+          borderTop: `1px solid ${t.border}`,
+          pb: 'env(safe-area-inset-bottom)',
         },
       }}
     >
-      {/* Puller visual */}
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'center',
-          pt: 1.5,
-          pb: 0.5,
-        }}
-      >
-        <Box
-          sx={{
-            width: 32,
-            height: 4,
-            borderRadius: 2,
-            backgroundColor: t.border,
-          }}
-        />
+      <Box sx={{ display: 'flex', justifyContent: 'center', pt: 1.25, pb: 0.5 }}>
+        <Box sx={{ width: 36, height: 4, borderRadius: 2, backgroundColor: t.borderStrong }} />
       </Box>
 
       {title && (
-        <Box sx={{ px: 2, pt: 1, pb: 0.5 }}>
-          <Typography variant="h6" sx={{ fontWeight: 700 }}>
-            {title}
-          </Typography>
+        <Box sx={{ px: 2.5, pt: 1, pb: 1 }}>
+          <Typography variant="h6">{title}</Typography>
         </Box>
       )}
 

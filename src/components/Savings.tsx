@@ -1,13 +1,6 @@
-import { Box, Typography } from '@mui/material';
 import SavingsList from './SavingsList';
 
+// La cabecera de la página vive en SavingsList, que es quien tiene la acción "Nueva meta"
 export default function Savings() {
-  return (
-    <Box>
-      <Typography variant="h5" sx={{ fontWeight: 700, mb: 3 }}>
-        Ahorros
-      </Typography>
-      <SavingsList />
-    </Box>
-  );
+  return <SavingsList />;
 }

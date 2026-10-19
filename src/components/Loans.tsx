@@ -2,9 +2,6 @@ import { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
-  Card,
-  CardContent,
-  Grid,
   Button,
   Divider,
   Table,
@@ -13,7 +10,6 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Paper,
   Chip,
   IconButton,
   Dialog,
@@ -28,19 +24,22 @@ import {
   Alert,
   Tooltip,
   Fab,
-  Stack,
   Skeleton,
-  InputBase,
+  InputAdornment,
+  ToggleButton,
+  ToggleButtonGroup,
 } from '@mui/material';
 import { useTheme, useMediaQuery } from '@mui/material';
-import {
-  Add as AddIcon,
-  Edit as EditIcon,
-  Delete as DeleteIcon,
-  ShowChart as ShowChartIcon,
-} from '@mui/icons-material';
-import SearchIcon from '@mui/icons-material/Search';
-import ClearIcon from '@mui/icons-material/Clear';
+import AddRoundedIcon from '@mui/icons-material/AddRounded';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
+import ShowChartRoundedIcon from '@mui/icons-material/ShowChartRounded';
+import AccountBalanceOutlinedIcon from '@mui/icons-material/AccountBalanceOutlined';
+import PaymentsOutlinedIcon from '@mui/icons-material/PaymentsOutlined';
+import TrendingUpRoundedIcon from '@mui/icons-material/TrendingUpRounded';
+import TrendingDownRoundedIcon from '@mui/icons-material/TrendingDownRounded';
+import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
+import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import { Investment } from '../db/config';
 import {
   calculateMaturityValue,
@@ -53,8 +52,19 @@ import {
   updateInvestment,
   deleteInvestment,
 } from '../db';
-import { SummaryCard, StatusChip, EmptyState, ConfirmDialog, FormSection, SwipeableCard } from './ui';
+import {
+  SummaryCard,
+  StatusChip,
+  EmptyState,
+  ConfirmDialog,
+  FormSection,
+  SwipeableCard,
+  PageHeader,
+  MoneyAmount,
+} from './ui';
+import DateDisplay from './DateDisplay';
 import { tokens } from '../theme';
+import { formatCurrency } from '../utils/formatters';
 import { useToast } from '../contexts/ToastContext';
 
 interface InvestmentFormData {
@@ -95,8 +105,18 @@ const compoundingFrequencies = [
   { value: 'annual', label: 'Anual' },
 ];
 
-const formatCurrency = (amount: number) =>
-  new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(amount);
+const formatRate = (rate: number) => `${rate.toLocaleString('es-ES', { maximumFractionDigits: 2 })} %`;
+
+const formatSignedPercent = (value: number) =>
+  `${value >= 0 ? '+' : ''}${value.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %`;
+
+// Días hasta el vencimiento como pastilla: verde con margen, ámbar el último mes, rojo vencida
+function MaturityChip({ days }: { days: number }) {
+  if (days <= 0) return <StatusChip status="overdue" label="Vencida" />;
+  return <StatusChip status={days > 30 ? 'active' : 'pending'} label={`${days.toLocaleString('es-ES')} días`} />;
+}
+
+const statusLabels = { all: 'Todas', active: 'Activas', inactive: 'Inactivas' } as const;
 
 export default function Investments() {
   const [investments, setInvestments] = useState<Investment[]>([]);
@@ -261,9 +281,222 @@ export default function Investments() {
   const totalCurrentValue = investments.reduce((sum, inv) => sum + inv.currentAmount, 0);
   const totalGains = totalCurrentValue - totalInvested;
   const totalReturnPercentage = totalInvested > 0 ? (totalGains / totalInvested) * 100 : 0;
+  const activeCount = investments.filter((inv) => inv.isActive).length;
+
+  const emptyState = (
+    <Box sx={{ borderRadius: '14px', border: `1px dashed ${t.borderStrong}`, backgroundColor: t.surface }}>
+      <EmptyState
+        icon={<ShowChartRoundedIcon />}
+        title={investments.length === 0 ? 'No hay inversiones registradas' : 'Ninguna inversión coincide'}
+        description={
+          investments.length === 0
+            ? 'Añade depósitos, bonos o fondos para seguir su rentabilidad'
+            : 'Prueba con otra búsqueda o cambia los filtros'
+        }
+        action={
+          investments.length === 0 ? (
+            <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={() => handleOpenDialog()}>
+              Nueva inversión
+            </Button>
+          ) : undefined
+        }
+      />
+    </Box>
+  );
+
+  const rowActions = (investment: Investment) => (
+    <Box sx={{ display: 'flex', gap: 0.25, justifyContent: 'flex-end' }}>
+      <Tooltip title="Editar inversión">
+        <IconButton aria-label={`Editar ${investment.name}`} onClick={() => handleOpenDialog(investment)} sx={{ width: 40, height: 40 }}>
+          <EditOutlinedIcon fontSize="small" />
+        </IconButton>
+      </Tooltip>
+      <Tooltip title="Eliminar inversión">
+        <IconButton
+          aria-label={`Eliminar ${investment.name}`}
+          onClick={() => handleDelete(investment.id!)}
+          sx={{ width: 40, height: 40, '&:hover': { color: t.danger, backgroundColor: t.dangerSoft } }}
+        >
+          <DeleteOutlineRoundedIcon fontSize="small" />
+        </IconButton>
+      </Tooltip>
+    </Box>
+  );
+
+  const typeChip = (investment: Investment) => (
+    <Box
+      component="span"
+      sx={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        height: 22,
+        px: 1,
+        borderRadius: '6px',
+        backgroundColor: t.surfaceSoft,
+        color: t.textSecondary,
+        fontSize: '0.75rem',
+        fontWeight: 500,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {getTypeLabel(investment.type)}
+    </Box>
+  );
+
+  const gainBlock = (investment: Investment, align: 'left' | 'right') => {
+    const { totalReturn, returnPercentage } = calculateTotalReturn(investment);
+    const maturityValue = calculateMaturityValue(investment);
+    const positive = totalReturn >= 0;
+    return (
+      <Tooltip title={`Valor al vencimiento: ${formatCurrency(maturityValue)}`}>
+        <Box sx={{ textAlign: align, cursor: 'help' }}>
+          <MoneyAmount value={totalReturn} size="sm" tone={positive ? 'success' : 'danger'} />
+          <Typography
+            variant="caption"
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: align === 'right' ? 'flex-end' : 'flex-start',
+              gap: 0.25,
+              color: positive ? t.success : t.danger,
+              fontWeight: 500,
+              fontVariantNumeric: 'tabular-nums',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {positive ? <TrendingUpRoundedIcon sx={{ fontSize: '0.9rem' }} /> : <TrendingDownRoundedIcon sx={{ fontSize: '0.9rem' }} />}
+            {formatSignedPercent(returnPercentage)}
+          </Typography>
+        </Box>
+      </Tooltip>
+    );
+  };
+
+  const renderMobileCard = (investment: Investment) => {
+    const daysToMaturity = calculateDaysToMaturity(investment);
+    return (
+      <SwipeableCard key={investment.id} onDelete={() => handleDelete(investment.id!)} disabled={false}>
+        <Box
+          sx={{
+            p: 2,
+            borderRadius: '14px',
+            border: `1px solid ${t.border}`,
+            backgroundColor: t.surface,
+            boxShadow: t.shadowSm,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 1.75,
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+            <Box
+              sx={{
+                width: 40,
+                height: 40,
+                flexShrink: 0,
+                borderRadius: '11px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: t.primarySoft,
+                color: t.primary,
+              }}
+            >
+              <AccountBalanceOutlinedIcon fontSize="small" />
+            </Box>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography variant="subtitle1" sx={{ lineHeight: 1.3 }}>
+                {investment.name}
+              </Typography>
+              <Typography variant="body2" sx={{ color: t.textSecondary }}>
+                {getTypeLabel(investment.type)}
+              </Typography>
+            </Box>
+            <StatusChip status={investment.isActive ? 'active' : 'inactive'} />
+          </Box>
+
+          {investment.notes && (
+            <Typography variant="body2" sx={{ color: t.textSecondary, mt: -0.75 }}>
+              {investment.notes}
+            </Typography>
+          )}
+
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+              gap: 1.5,
+              p: 1.5,
+              borderRadius: '10px',
+              backgroundColor: t.surfaceSoft,
+            }}
+          >
+            <Box sx={{ minWidth: 0 }}>
+              <Typography variant="caption" sx={{ display: 'block', color: t.textMuted }}>
+                Invertido
+              </Typography>
+              <MoneyAmount value={investment.initialAmount} size="md" />
+            </Box>
+            <Box sx={{ minWidth: 0, textAlign: 'right' }}>
+              <Typography variant="caption" sx={{ display: 'block', color: t.textMuted }}>
+                Valor actual
+              </Typography>
+              <MoneyAmount value={investment.currentAmount} size="md" />
+            </Box>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography variant="caption" sx={{ display: 'block', color: t.textMuted }}>
+                Tasa · plazo
+              </Typography>
+              <Typography variant="body2" sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                {formatRate(investment.annualRate)} · {investment.termMonths} meses
+              </Typography>
+              <Typography variant="caption" sx={{ color: t.textMuted }}>
+                Capitalización {getFrequencyLabel(investment.compoundingFrequency).toLowerCase()}
+              </Typography>
+            </Box>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography variant="caption" sx={{ display: 'block', color: t.textMuted, textAlign: 'right' }}>
+                Ganancia esperada
+              </Typography>
+              {gainBlock(investment, 'right')}
+            </Box>
+          </Box>
+
+          <Box>
+            <Divider sx={{ mb: 1 }} />
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+                <MaturityChip days={daysToMaturity} />
+                <Typography variant="caption" sx={{ color: t.textMuted, whiteSpace: 'nowrap' }}>
+                  desde <DateDisplay date={investment.startDate} />
+                </Typography>
+              </Box>
+              <Box sx={{ mr: -0.75 }}>{rowActions(investment)}</Box>
+            </Box>
+          </Box>
+        </Box>
+      </SwipeableCard>
+    );
+  };
 
   return (
     <Box>
+      <PageHeader
+        title="Inversiones"
+        subtitle={
+          investments.length > 0
+            ? `${investments.length} ${investments.length === 1 ? 'inversión' : 'inversiones'} · ${activeCount} ${activeCount === 1 ? 'activa' : 'activas'}`
+            : 'Sigue la rentabilidad de tus depósitos, bonos y fondos'
+        }
+        actions={
+          !isMobile ? (
+            <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={() => handleOpenDialog()}>
+              Nueva inversión
+            </Button>
+          ) : undefined
+        }
+      />
+
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
           {error}
@@ -271,642 +504,358 @@ export default function Investments() {
       )}
 
       {/* Summary cards */}
-      <Grid container spacing={1.5} sx={{ mb: 3 }}>
-        <Grid item xs={6} sm={3}>
-          <SummaryCard label="Total invertido" value={totalInvested} isCurrency tone="primary" />
-        </Grid>
-        <Grid item xs={6} sm={3}>
-          <SummaryCard label="Valor actual" value={totalCurrentValue} isCurrency tone="success" />
-        </Grid>
-        <Grid item xs={6} sm={3}>
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', md: '1.6fr 1fr 1fr' },
+          gap: 1.5,
+          mb: 3,
+        }}
+      >
+        <Box sx={{ gridColumn: { xs: '1 / -1', md: 'auto' }, minWidth: 0 }}>
           <SummaryCard
-            label="Ganancias"
-            value={totalGains}
+            label="Valor actual"
+            value={totalCurrentValue}
             isCurrency
-            tone={totalGains >= 0 ? 'success' : 'danger'}
+            variant="hero"
+            icon={<ShowChartRoundedIcon />}
+            helperText={`${activeCount} ${activeCount === 1 ? 'inversión activa' : 'inversiones activas'}`}
           />
-        </Grid>
-        <Grid item xs={6} sm={3}>
-          <SummaryCard
-            label="Rendimiento"
-            value={`${totalReturnPercentage.toFixed(2)}%`}
-            tone={totalReturnPercentage >= 0 ? 'success' : 'danger'}
-          />
-        </Grid>
-      </Grid>
+        </Box>
+        <SummaryCard
+          label="Total invertido"
+          value={totalInvested}
+          isCurrency
+          tone="primary"
+          icon={<PaymentsOutlinedIcon />}
+        />
+        <SummaryCard
+          label="Ganancias"
+          value={totalGains}
+          isCurrency
+          tone={totalGains >= 0 ? 'success' : 'danger'}
+          icon={totalGains >= 0 ? <TrendingUpRoundedIcon /> : <TrendingDownRoundedIcon />}
+          helperText={`Rendimiento ${formatSignedPercent(totalReturnPercentage)}`}
+        />
+      </Box>
 
       {/* Search and filters */}
-      <Box sx={{ mb: 2 }}>
+      <Box sx={{ mb: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
         <Box
           sx={{
             display: 'flex',
-            alignItems: 'center',
-            gap: 1,
-            px: 1.5,
-            py: 0.75,
-            borderRadius: '12px',
-            border: `1px solid ${t.border}`,
-            backgroundColor: t.surface,
-            mb: 1.5,
+            flexDirection: { xs: 'column', sm: 'row' },
+            alignItems: { xs: 'stretch', sm: 'center' },
+            justifyContent: 'space-between',
+            gap: 1.5,
           }}
         >
-          <SearchIcon sx={{ color: t.textMuted, fontSize: '1.1rem' }} />
-          <InputBase
-            fullWidth
+          <TextField
+            size="small"
             placeholder="Buscar inversión…"
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
-            sx={{ fontSize: '0.875rem', color: t.textPrimary }}
+            inputProps={{ 'aria-label': 'Buscar inversiones' }}
+            sx={{ width: { xs: '100%', sm: 340 }, '& .MuiOutlinedInput-root': { minHeight: 40 } }}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchRoundedIcon fontSize="small" />
+                </InputAdornment>
+              ),
+              endAdornment: searchText ? (
+                <InputAdornment position="end">
+                  <IconButton size="small" edge="end" aria-label="Limpiar búsqueda" onClick={() => setSearchText('')}>
+                    <CloseRoundedIcon sx={{ fontSize: '1rem' }} />
+                  </IconButton>
+                </InputAdornment>
+              ) : undefined,
+            }}
           />
-          {searchText && (
-            <IconButton size="small" onClick={() => setSearchText('')} sx={{ p: 0.25 }}>
-              <ClearIcon sx={{ fontSize: '1rem', color: t.textMuted }} />
-            </IconButton>
-          )}
+          <ToggleButtonGroup
+            exclusive
+            size="small"
+            value={activeFilter}
+            onChange={(_, value) => value && setActiveFilter(value)}
+            aria-label="Filtrar por estado"
+            sx={{ alignSelf: { xs: 'stretch', sm: 'auto' }, '& .MuiToggleButton-root': { flex: { xs: 1, sm: 'none' }, minHeight: 34 } }}
+          >
+            {(['all', 'active', 'inactive'] as const).map((f) => (
+              <ToggleButton key={f} value={f}>
+                {statusLabels[f]}
+              </ToggleButton>
+            ))}
+          </ToggleButtonGroup>
         </Box>
 
         {/* Type chips */}
-        <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', mb: 1 }}>
+        <Box
+          role="group"
+          aria-label="Filtrar por tipo"
+          sx={{
+            display: 'flex',
+            gap: 0.75,
+            flexWrap: { xs: 'nowrap', sm: 'wrap' },
+            overflowX: { xs: 'auto', sm: 'visible' },
+            mx: { xs: -2, sm: 0 },
+            px: { xs: 2, sm: 0 },
+            pb: { xs: 0.5, sm: 0 },
+            scrollbarWidth: 'none',
+            '&::-webkit-scrollbar': { display: 'none' },
+          }}
+        >
           <Chip
-            label="Todos"
-            size="small"
+            label="Todos los tipos"
             onClick={() => setTypeFilter('all')}
             variant={typeFilter === 'all' ? 'filled' : 'outlined'}
             color={typeFilter === 'all' ? 'primary' : 'default'}
-            sx={{ fontWeight: 600 }}
+            sx={{ flexShrink: 0, height: 32 }}
           />
           {presentTypes.map((type) => (
             <Chip
               key={type}
               label={getTypeLabel(type)}
-              size="small"
               onClick={() => setTypeFilter(typeFilter === type ? 'all' : type)}
               variant={typeFilter === type ? 'filled' : 'outlined'}
               color={typeFilter === type ? 'primary' : 'default'}
-              sx={{ fontWeight: 500 }}
+              sx={{ flexShrink: 0, height: 32 }}
             />
           ))}
-        </Box>
-
-        {/* Active/inactive chips */}
-        <Box sx={{ display: 'flex', gap: 0.75 }}>
-          {(['all', 'active', 'inactive'] as const).map((f) => {
-            const labels = { all: 'Todos', active: 'Activas', inactive: 'Inactivas' };
-            return (
-              <Chip
-                key={f}
-                label={labels[f]}
-                size="small"
-                onClick={() => setActiveFilter(f)}
-                variant={activeFilter === f ? 'filled' : 'outlined'}
-                color={activeFilter === f ? 'primary' : 'default'}
-                sx={{ fontWeight: 600 }}
-              />
-            );
-          })}
         </Box>
       </Box>
 
       {/* Mobile cards / Desktop table */}
-      {isMobile ? (
-        <Box>
-          {listLoading ? (
-            <>
-              {[1, 2, 3].map((i) => (
-                <Skeleton
-                  key={i}
-                  variant="rectangular"
-                  height={160}
-                  sx={{ borderRadius: 3, mb: 1 }}
-                />
-              ))}
-            </>
-          ) : filteredInvestments.length === 0 ? (
-            <EmptyState
-              icon={<ShowChartIcon />}
-              title="No hay inversiones registradas"
-              description="Pulsa el botón + para añadir tu primera inversión"
-            />
-          ) : (
-            filteredInvestments.map((investment) => {
-              const daysToMaturity = calculateDaysToMaturity(investment);
-              const { totalReturn, returnPercentage } = calculateTotalReturn(investment);
-              const maturityValue = calculateMaturityValue(investment);
-
-              return (
-                <SwipeableCard
-                  key={investment.id}
-                  onDelete={() => handleDelete(investment.id!)}
-                  disabled={false}
-                >
-                  <Card
-                    variant="outlined"
-                    sx={{ mb: 0, borderRadius: '20px', border: `1px solid ${t.border}` }}
-                  >
-                    <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                      {/* Header */}
-                      <Box
-                        sx={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'flex-start',
-                          mb: 1,
-                        }}
-                      >
-                        <Box sx={{ flex: 1, pr: 1 }}>
-                          <Typography
-                            variant="body2"
-                            sx={{ fontWeight: 700, color: t.textPrimary }}
-                          >
-                            {investment.name}
-                          </Typography>
-                          {investment.notes && (
-                            <Typography
-                              variant="caption"
-                              sx={{ color: t.textSecondary, display: 'block' }}
-                            >
-                              {investment.notes}
-                            </Typography>
-                          )}
-                        </Box>
-                        <StatusChip status={investment.isActive ? 'active' : 'inactive'} />
-                      </Box>
-
-                      {/* Type + info chips */}
-                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mb: 1 }}>
-                        <Chip
-                          size="small"
-                          label={getTypeLabel(investment.type)}
-                          sx={{
-                            height: 22,
-                            fontSize: '0.7rem',
-                            backgroundColor: t.primarySoft,
-                            color: t.primary,
-                            '& .MuiChip-label': { px: 1 },
-                          }}
-                        />
-                        <Chip
-                          size="small"
-                          label={`${investment.termMonths} meses`}
-                          sx={{
-                            height: 22,
-                            fontSize: '0.7rem',
-                            backgroundColor: t.surfaceSoft,
-                            color: t.textSecondary,
-                            border: `1px solid ${t.border}`,
-                            '& .MuiChip-label': { px: 1 },
-                          }}
-                        />
-                        <Chip
-                          size="small"
-                          label={`${investment.annualRate}% TAE`}
-                          sx={{
-                            height: 22,
-                            fontSize: '0.7rem',
-                            backgroundColor: t.surfaceSoft,
-                            color: t.textSecondary,
-                            border: `1px solid ${t.border}`,
-                            '& .MuiChip-label': { px: 1 },
-                          }}
-                        />
-                      </Box>
-
-                      {/* Amounts */}
-                      <Box
-                        sx={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          mb: 0.75,
-                          px: 1.5,
-                          py: 1,
-                          borderRadius: '8px',
-                          backgroundColor: t.surfaceSoft,
-                        }}
-                      >
-                        <Box>
-                          <Typography variant="caption" sx={{ color: t.textMuted }}>
-                            Inversión inicial
-                          </Typography>
-                          <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                            {formatCurrency(investment.initialAmount)}
-                          </Typography>
-                        </Box>
-                        <Box sx={{ textAlign: 'right' }}>
-                          <Typography variant="caption" sx={{ color: t.textMuted }}>
-                            Valor actual
-                          </Typography>
-                          <Typography
-                            variant="body2"
-                            sx={{ fontWeight: 700, color: t.success }}
-                          >
-                            {formatCurrency(investment.currentAmount)}
-                          </Typography>
-                        </Box>
-                      </Box>
-
-                      <Box
-                        sx={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          mt: 0.5,
-                        }}
-                      >
-                        <Chip
-                          label={daysToMaturity > 0 ? `${daysToMaturity} días` : 'Vencido'}
-                          size="small"
-                          sx={{
-                            height: 22,
-                            fontSize: '0.7rem',
-                            fontWeight: 600,
-                            backgroundColor:
-                              daysToMaturity > 30
-                                ? t.successSoft
-                                : daysToMaturity > 0
-                                ? t.warningSoft
-                                : t.dangerSoft,
-                            color:
-                              daysToMaturity > 30
-                                ? t.success
-                                : daysToMaturity > 0
-                                ? t.warning
-                                : t.danger,
-                            '& .MuiChip-label': { px: 1 },
-                          }}
-                        />
-                        <Tooltip title={`Valor al vencimiento: ${formatCurrency(maturityValue)}`}>
-                          <Box sx={{ textAlign: 'right' }}>
-                            <Typography
-                              variant="body2"
-                              sx={{ fontWeight: 700, color: t.textPrimary }}
-                            >
-                              {formatCurrency(totalReturn)}
-                            </Typography>
-                            <Typography variant="caption" sx={{ color: t.success }}>
-                              +{returnPercentage.toFixed(2)}%
-                            </Typography>
-                          </Box>
-                        </Tooltip>
-                      </Box>
-
-                      <Divider sx={{ my: 1, borderColor: t.border }} />
-
-                      <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
-                        <IconButton
-                          size="small"
-                          onClick={() => handleOpenDialog(investment)}
-                          sx={{ color: t.primary }}
-                        >
-                          <EditIcon sx={{ fontSize: '1rem' }} />
-                        </IconButton>
-                        <IconButton
-                          size="small"
-                          onClick={() => handleDelete(investment.id!)}
-                          sx={{ color: t.danger }}
-                        >
-                          <DeleteIcon sx={{ fontSize: '1rem' }} />
-                        </IconButton>
-                      </Box>
-                    </CardContent>
-                  </Card>
-                </SwipeableCard>
-              );
-            })
-          )}
+      {listLoading ? (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} variant="rounded" height={isMobile ? 200 : 64} sx={{ borderRadius: '14px' }} />
+          ))}
         </Box>
+      ) : filteredInvestments.length === 0 ? (
+        emptyState
+      ) : isMobile ? (
+        <Box>{filteredInvestments.map(renderMobileCard)}</Box>
       ) : (
-        <TableContainer
-          component={Paper}
-          sx={{
-            border: `1px solid ${t.border}`,
-            borderRadius: '16px',
-            overflow: 'hidden',
-          }}
-        >
-          {listLoading ? (
-            <Box sx={{ p: 2 }}>
-              {[1, 2, 3].map((i) => (
-                <Skeleton key={i} variant="rectangular" height={40} sx={{ mb: 1, borderRadius: 1 }} />
-              ))}
-            </Box>
-          ) : filteredInvestments.length === 0 ? (
-            <EmptyState
-              icon={<ShowChartIcon />}
-              title="No hay inversiones registradas"
-              description="Pulsa el botón + para añadir tu primera inversión"
-            />
-          ) : (
-            <Table size="small">
-              <TableHead>
-                <TableRow sx={{ backgroundColor: t.surfaceSoft }}>
-                  <TableCell sx={{ fontWeight: 700, color: t.textSecondary, fontSize: '0.8rem' }}>
-                    Nombre
-                  </TableCell>
-                  <TableCell sx={{ fontWeight: 700, color: t.textSecondary, fontSize: '0.8rem' }}>
-                    Tipo
-                  </TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 700, color: t.textSecondary, fontSize: '0.8rem' }}>
-                    Inv. Inicial
-                  </TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 700, color: t.textSecondary, fontSize: '0.8rem' }}>
-                    Valor Actual
-                  </TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 700, color: t.textSecondary, fontSize: '0.8rem' }}>
-                    Tasa Anual
-                  </TableCell>
-                  <TableCell align="center" sx={{ fontWeight: 700, color: t.textSecondary, fontSize: '0.8rem' }}>
-                    Fecha Inicio
-                  </TableCell>
-                  <TableCell align="center" sx={{ fontWeight: 700, color: t.textSecondary, fontSize: '0.8rem' }}>
-                    Plazo
-                  </TableCell>
-                  <TableCell align="center" sx={{ fontWeight: 700, color: t.textSecondary, fontSize: '0.8rem' }}>
-                    Días Rest.
-                  </TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 700, color: t.textSecondary, fontSize: '0.8rem' }}>
-                    Ganancia
-                  </TableCell>
-                  <TableCell align="center" sx={{ fontWeight: 700, color: t.textSecondary, fontSize: '0.8rem' }}>
-                    Estado
-                  </TableCell>
-                  <TableCell align="center" sx={{ fontWeight: 700, color: t.textSecondary, fontSize: '0.8rem' }}>
+        <TableContainer sx={{ boxShadow: t.shadowSm }}>
+          <Table sx={{ '& th, & td': { px: 1.5 }, '& th:first-of-type, & td:first-of-type': { pl: 2.5 } }}>
+            <TableHead>
+              <TableRow>
+                <TableCell>Inversión</TableCell>
+                <TableCell align="right">Invertido</TableCell>
+                <TableCell align="right">Valor actual</TableCell>
+                <TableCell>Tasa y plazo</TableCell>
+                <TableCell>Vencimiento</TableCell>
+                <TableCell align="right">Ganancia</TableCell>
+                <TableCell>Estado</TableCell>
+                <TableCell align="right" sx={{ width: 96 }}>
+                  <Box component="span" sx={{ position: 'absolute', width: '1px', height: '1px', overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>
                     Acciones
-                  </TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {filteredInvestments.map((investment) => {
-                  const daysToMaturity = calculateDaysToMaturity(investment);
-                  const { totalReturn, returnPercentage } = calculateTotalReturn(investment);
-                  const maturityValue = calculateMaturityValue(investment);
+                  </Box>
+                </TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {filteredInvestments.map((investment) => {
+                const daysToMaturity = calculateDaysToMaturity(investment);
 
-                  return (
-                    <TableRow
-                      key={investment.id}
-                      sx={{
-                        '&:hover td': { backgroundColor: t.surfaceSoft },
-                        transition: 'background 0.1s',
-                      }}
-                    >
-                      <TableCell>
-                        <Box>
-                          <Typography variant="body2" fontWeight={600}>
-                            {investment.name}
-                          </Typography>
-                          {investment.notes && (
-                            <Typography variant="caption" color="text.secondary">
-                              {investment.notes}
-                            </Typography>
-                          )}
-                        </Box>
-                      </TableCell>
-                      <TableCell sx={{ fontSize: '0.85rem' }}>
-                        {getTypeLabel(investment.type)}
-                      </TableCell>
-                      <TableCell align="right">{formatCurrency(investment.initialAmount)}</TableCell>
-                      <TableCell align="right">{formatCurrency(investment.currentAmount)}</TableCell>
-                      <TableCell align="right">{investment.annualRate}%</TableCell>
-                      <TableCell align="center" sx={{ fontSize: '0.85rem', color: t.textSecondary }}>
-                        {investment.startDate.toLocaleDateString('es-ES')}
-                      </TableCell>
-                      <TableCell align="center">
-                        <Box>
-                          <Typography variant="body2">{investment.termMonths} meses</Typography>
-                          <Typography variant="caption" sx={{ color: t.textSecondary }}>
-                            {getFrequencyLabel(investment.compoundingFrequency)}
-                          </Typography>
-                        </Box>
-                      </TableCell>
-                      <TableCell align="center">
-                        <Chip
-                          label={daysToMaturity > 0 ? `${daysToMaturity} días` : 'Vencido'}
-                          size="small"
-                          sx={{
-                            height: 22,
-                            fontSize: '0.7rem',
-                            fontWeight: 600,
-                            backgroundColor:
-                              daysToMaturity > 30
-                                ? t.successSoft
-                                : daysToMaturity > 0
-                                ? t.warningSoft
-                                : t.dangerSoft,
-                            color:
-                              daysToMaturity > 30
-                                ? t.success
-                                : daysToMaturity > 0
-                                ? t.warning
-                                : t.danger,
-                            '& .MuiChip-label': { px: 1 },
-                          }}
-                        />
-                      </TableCell>
-                      <TableCell align="right">
-                        <Tooltip title={`Valor al vencimiento: ${formatCurrency(maturityValue)}`}>
-                          <Box>
-                            <Typography variant="body2" fontWeight={700}>
-                              {formatCurrency(totalReturn)}
-                            </Typography>
-                            <Typography variant="caption" sx={{ color: t.success }}>
-                              +{returnPercentage.toFixed(2)}%
-                            </Typography>
-                          </Box>
-                        </Tooltip>
-                      </TableCell>
-                      <TableCell align="center">
-                        <StatusChip status={investment.isActive ? 'active' : 'inactive'} />
-                      </TableCell>
-                      <TableCell align="center">
-                        <Stack direction="row" spacing={0.5} justifyContent="center">
-                          <IconButton
-                            size="small"
-                            onClick={() => handleOpenDialog(investment)}
-                            sx={{ color: t.primary }}
+                return (
+                  <TableRow key={investment.id} hover>
+                    <TableCell sx={{ minWidth: 180, maxWidth: 260 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 600, color: t.textPrimary }}>
+                        {investment.name}
+                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5, minWidth: 0 }}>
+                        {typeChip(investment)}
+                        {investment.notes && (
+                          <Typography
+                            variant="caption"
+                            sx={{ color: t.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}
+                            title={investment.notes}
                           >
-                            <EditIcon />
-                          </IconButton>
-                          <IconButton
-                            size="small"
-                            onClick={() => handleDelete(investment.id!)}
-                            sx={{ color: t.danger }}
-                          >
-                            <DeleteIcon />
-                          </IconButton>
-                        </Stack>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          )}
+                            {investment.notes}
+                          </Typography>
+                        )}
+                      </Box>
+                    </TableCell>
+                    <TableCell align="right">
+                      <MoneyAmount value={investment.initialAmount} size="sm" weight={500} />
+                    </TableCell>
+                    <TableCell align="right">
+                      <MoneyAmount value={investment.currentAmount} size="sm" />
+                    </TableCell>
+                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                      <Typography variant="body2" sx={{ fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>
+                        {formatRate(investment.annualRate)} · {investment.termMonths} meses
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: t.textMuted }}>
+                        Capitalización {getFrequencyLabel(investment.compoundingFrequency).toLowerCase()}
+                      </Typography>
+                    </TableCell>
+                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                      <MaturityChip days={daysToMaturity} />
+                      <Typography variant="caption" component="div" sx={{ color: t.textMuted, mt: 0.5 }}>
+                        desde <DateDisplay date={investment.startDate} />
+                      </Typography>
+                    </TableCell>
+                    <TableCell align="right">{gainBlock(investment, 'right')}</TableCell>
+                    <TableCell>
+                      <StatusChip status={investment.isActive ? 'active' : 'inactive'} />
+                    </TableCell>
+                    <TableCell align="right" sx={{ py: 0.5, pr: '8px !important' }}>
+                      {rowActions(investment)}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
         </TableContainer>
       )}
 
-      {/* FAB verde para añadir inversión */}
-      <Tooltip title="Añadir inversión" placement="left">
+      {/* FAB para añadir inversión (móvil) */}
+      {isMobile && (
         <Fab
-          aria-label="Añadir inversión"
-          size="small"
+          color="primary"
+          aria-label="Nueva inversión"
           onClick={() => handleOpenDialog()}
           sx={{
             position: 'fixed',
             right: 'calc(env(safe-area-inset-right) + 16px)',
-            bottom: 'calc(var(--bottom-nav-height) + env(safe-area-inset-bottom) - 16px)',
+            bottom: 'calc(64px + env(safe-area-inset-bottom) + 16px)',
             zIndex: 1000,
-            width: 40,
-            height: 40,
-            minWidth: 40,
-            minHeight: 40,
-            background: 'linear-gradient(90deg, #10B981, #059669)',
-            color: '#fff',
-            boxShadow: '0 8px 20px rgba(16, 185, 129, 0.35)',
-            border: '1px solid rgba(255,255,255,0.25)',
-            '&:hover': {
-              background: 'linear-gradient(90deg, #059669, #047857)',
-              boxShadow: '0 10px 24px rgba(5, 150, 105, 0.45)',
-            },
           }}
         >
-          <AddIcon fontSize="small" />
+          <AddRoundedIcon />
         </Fab>
-      </Tooltip>
+      )}
 
       {/* Dialog nueva/editar inversión */}
       <Dialog
         open={openDialog}
         onClose={handleCloseDialog}
-        maxWidth="md"
+        maxWidth="sm"
         fullWidth
         fullScreen={isMobile}
         PaperProps={{
-          sx: isMobile ? { borderRadius: 0, margin: 0, maxHeight: '100%' } : undefined,
+          sx: isMobile ? { borderRadius: 0, margin: 0, maxHeight: '100%', border: 0 } : undefined,
         }}
       >
-        <DialogTitle sx={{ fontWeight: 700 }}>
-          {editingInvestment ? 'Editar Inversión' : 'Nueva Inversión'}
+        <DialogTitle>
+          {editingInvestment ? 'Editar inversión' : 'Nueva inversión'}
+          <Typography variant="body2" sx={{ color: t.textSecondary, mt: 0.5 }}>
+            El valor al vencimiento se calcula con interés compuesto.
+          </Typography>
         </DialogTitle>
-        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 3, pt: 1 }}>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 3, pt: '12px !important' }}>
           {error && (
-            <Alert severity="error" sx={{ mb: 1 }}>
+            <Alert severity="error">
               {error}
             </Alert>
           )}
 
           <FormSection title="Datos básicos">
-            <Grid container spacing={2}>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Nombre de la Inversión"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  required
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <FormControl fullWidth>
-                  <InputLabel>Tipo de Inversión</InputLabel>
-                  <Select
-                    value={formData.type}
-                    label="Tipo de Inversión"
-                    onChange={(e) =>
-                      setFormData({ ...formData, type: e.target.value as Investment['type'] })
-                    }
-                  >
-                    {investmentTypes.map((type) => (
-                      <MenuItem key={type.value} value={type.value}>
-                        {type.label}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-            </Grid>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
+              <TextField
+                fullWidth
+                label="Nombre de la inversión"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                required
+              />
+              <FormControl fullWidth>
+                <InputLabel>Tipo de inversión</InputLabel>
+                <Select
+                  value={formData.type}
+                  label="Tipo de inversión"
+                  onChange={(e) =>
+                    setFormData({ ...formData, type: e.target.value as Investment['type'] })
+                  }
+                >
+                  {investmentTypes.map((type) => (
+                    <MenuItem key={type.value} value={type.value}>
+                      {type.label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Box>
           </FormSection>
 
-          <FormSection title="Monto y tasa">
-            <Grid container spacing={2}>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Monto Inicial"
-                  type="number"
-                  value={formData.initialAmount}
-                  onChange={(e) =>
-                    setFormData({ ...formData, initialAmount: parseFloat(e.target.value) || 0 })
-                  }
-                  required
-                  inputProps={{ min: 0, step: 0.01 }}
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Tasa Anual (%)"
-                  type="number"
-                  value={formData.annualRate}
-                  onChange={(e) =>
-                    setFormData({ ...formData, annualRate: parseFloat(e.target.value) || 0 })
-                  }
-                  required
-                  inputProps={{ min: 0, step: 0.01 }}
-                />
-              </Grid>
-            </Grid>
+          <FormSection title="Importe y tasa">
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
+              <TextField
+                fullWidth
+                label="Importe inicial"
+                type="number"
+                value={formData.initialAmount}
+                onChange={(e) =>
+                  setFormData({ ...formData, initialAmount: parseFloat(e.target.value) || 0 })
+                }
+                required
+                inputProps={{ min: 0, step: 0.01, inputMode: 'decimal' }}
+                InputProps={{ endAdornment: <InputAdornment position="end">€</InputAdornment> }}
+              />
+              <TextField
+                fullWidth
+                label="Tasa anual"
+                type="number"
+                value={formData.annualRate}
+                onChange={(e) =>
+                  setFormData({ ...formData, annualRate: parseFloat(e.target.value) || 0 })
+                }
+                required
+                inputProps={{ min: 0, step: 0.01, inputMode: 'decimal' }}
+                InputProps={{ endAdornment: <InputAdornment position="end">%</InputAdornment> }}
+              />
+            </Box>
           </FormSection>
 
           <FormSection title="Plazos">
-            <Grid container spacing={2}>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Fecha de Inicio"
-                  type="date"
-                  value={formData.startDate.toISOString().split('T')[0]}
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
+              <TextField
+                fullWidth
+                label="Fecha de inicio"
+                type="date"
+                value={formData.startDate.toISOString().split('T')[0]}
+                onChange={(e) =>
+                  setFormData({ ...formData, startDate: new Date(e.target.value) })
+                }
+                required
+                InputLabelProps={{ shrink: true }}
+              />
+              <TextField
+                fullWidth
+                label="Plazo"
+                type="number"
+                value={formData.termMonths}
+                onChange={(e) =>
+                  setFormData({ ...formData, termMonths: parseInt(e.target.value) || 12 })
+                }
+                required
+                inputProps={{ min: 1, inputMode: 'numeric' }}
+                InputProps={{ endAdornment: <InputAdornment position="end">meses</InputAdornment> }}
+              />
+              <FormControl fullWidth sx={{ gridColumn: { sm: '1 / -1' } }}>
+                <InputLabel>Frecuencia de capitalización</InputLabel>
+                <Select
+                  value={formData.compoundingFrequency}
+                  label="Frecuencia de capitalización"
                   onChange={(e) =>
-                    setFormData({ ...formData, startDate: new Date(e.target.value) })
+                    setFormData({
+                      ...formData,
+                      compoundingFrequency: e.target
+                        .value as Investment['compoundingFrequency'],
+                    })
                   }
-                  required
-                  InputLabelProps={{ shrink: true }}
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Plazo (meses)"
-                  type="number"
-                  value={formData.termMonths}
-                  onChange={(e) =>
-                    setFormData({ ...formData, termMonths: parseInt(e.target.value) || 12 })
-                  }
-                  required
-                  inputProps={{ min: 1 }}
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <FormControl fullWidth>
-                  <InputLabel>Frecuencia de Capitalización</InputLabel>
-                  <Select
-                    value={formData.compoundingFrequency}
-                    label="Frecuencia de Capitalización"
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        compoundingFrequency: e.target
-                          .value as Investment['compoundingFrequency'],
-                      })
-                    }
-                  >
-                    {compoundingFrequencies.map((freq) => (
-                      <MenuItem key={freq.value} value={freq.value}>
-                        {freq.label}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-            </Grid>
+                >
+                  {compoundingFrequencies.map((freq) => (
+                    <MenuItem key={freq.value} value={freq.value}>
+                      {freq.label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Box>
           </FormSection>
 
           <FormSection title="Notas">
@@ -922,27 +871,26 @@ export default function Investments() {
         </DialogContent>
         <DialogActions
           sx={{
-            px: 3,
-            pb: isMobile ? 3 : 2,
-            gap: 1,
             ...(isMobile && {
               position: 'sticky',
               bottom: 0,
+              mt: 'auto',
               backgroundColor: t.surface,
               borderTop: `1px solid ${t.border}`,
+              pb: 'calc(env(safe-area-inset-bottom) + 16px)',
             }),
           }}
         >
-          <Button onClick={handleCloseDialog} variant="outlined" sx={{ borderRadius: '12px' }}>
+          <Button onClick={handleCloseDialog} variant="outlined" color="inherit">
             Cancelar
           </Button>
           <Button
             onClick={handleSubmit}
             variant="contained"
             disabled={loading}
-            sx={{ borderRadius: '12px', flex: isMobile ? 1 : undefined }}
+            sx={{ flex: isMobile ? 1 : undefined }}
           >
-            {loading ? 'Guardando…' : editingInvestment ? 'Actualizar' : 'Crear'}
+            {loading ? 'Guardando…' : editingInvestment ? 'Guardar cambios' : 'Crear inversión'}
           </Button>
         </DialogActions>
       </Dialog>

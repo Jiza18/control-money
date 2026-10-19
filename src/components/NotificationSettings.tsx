@@ -1,10 +1,14 @@
 import { useState, useEffect } from 'react';
 import { Box, Button, Typography, Alert } from '@mui/material';
-import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
+import { useTheme } from '@mui/material/styles';
+import { tokens } from '../theme';
+import NotificationsActiveOutlinedIcon from '@mui/icons-material/NotificationsActiveOutlined';
 import { useToast } from '../contexts/ToastContext';
 
 export default function NotificationSettings() {
   const toast = useToast();
+  const theme = useTheme();
+  const t = tokens[theme.palette.mode];
   const [permission, setPermission] = useState<NotificationPermission>('default');
 
   useEffect(() => {
@@ -46,12 +50,12 @@ export default function NotificationSettings() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <Typography variant="body2" color="text.secondary">
+      <Typography variant="body2" sx={{ color: t.textSecondary }}>
         Recibe recordatorios cuando tengas pagos recurrentes próximos (en los próximos 7 días).
       </Typography>
 
       {permission === 'granted' && (
-        <Alert severity="success" icon={<NotificationsActiveIcon />}>
+        <Alert severity="success" icon={<NotificationsActiveOutlinedIcon />}>
           Los recordatorios de pagos están activos. Solo se notifica una vez al día.
         </Alert>
       )}
@@ -74,8 +78,7 @@ export default function NotificationSettings() {
           <Button
             variant="contained"
             onClick={requestPermission}
-            startIcon={<NotificationsActiveIcon />}
-            sx={{ borderRadius: '12px' }}
+            startIcon={<NotificationsActiveOutlinedIcon />}
           >
             Activar recordatorios
           </Button>
@@ -84,7 +87,6 @@ export default function NotificationSettings() {
           <Button
             variant="outlined"
             onClick={testNotification}
-            sx={{ borderRadius: '12px' }}
           >
             Probar notificación
           </Button>

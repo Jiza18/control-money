@@ -1,19 +1,97 @@
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 import {
   Box,
-  Paper,
   Button,
+  Divider,
   Typography,
   Alert,
   CircularProgress,
-  Tooltip,
 } from '@mui/material';
+import { alpha, useTheme } from '@mui/material/styles';
+import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
+import FileUploadOutlinedIcon from '@mui/icons-material/FileUploadOutlined';
+import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded';
+import { tokens } from '../theme';
 import { resetDatabase, deleteDatabase } from '../db/config';
 import { exportDatabase, importDatabase, clearStore } from '../db';
 import { DatabaseConfig } from './DatabaseConfig';
 import { DatabaseType } from '../db/repositories/interfaces';
 
+interface DangerActionProps {
+  title: string;
+  description: string;
+  label: string;
+  onClick: () => void;
+  disabled: boolean;
+  loading?: boolean;
+  first?: boolean;
+}
+
+// Fila de la zona de peligro: qué hace la acción y su botón
+function DangerAction({ title, description, label, onClick, disabled, loading, first }: DangerActionProps) {
+  const theme = useTheme();
+  const t = tokens[theme.palette.mode];
+
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        alignItems: { xs: 'stretch', sm: 'center' },
+        flexDirection: { xs: 'column', sm: 'row' },
+        justifyContent: 'space-between',
+        gap: 1.5,
+        py: 1.5,
+        borderTop: first ? 'none' : `1px solid ${t.border}`,
+      }}
+    >
+      <Box sx={{ minWidth: 0 }}>
+        <Typography variant="body2" sx={{ fontWeight: 600, color: t.textPrimary }}>
+          {title}
+        </Typography>
+        <Typography variant="caption" component="p" sx={{ color: t.textSecondary }}>
+          {description}
+        </Typography>
+      </Box>
+      <Button
+        variant="outlined"
+        color="error"
+        onClick={onClick}
+        disabled={disabled}
+        startIcon={loading ? <CircularProgress size={16} color="inherit" /> : undefined}
+        sx={{
+          flexShrink: 0,
+          borderColor: t.danger,
+          color: t.danger,
+          backgroundColor: t.surface,
+          '&:hover': { borderColor: t.danger, backgroundColor: t.dangerSoft },
+        }}
+      >
+        {label}
+      </Button>
+    </Box>
+  );
+}
+
+function SubsectionTitle({ title, description }: { title: string; description: ReactNode }) {
+  const theme = useTheme();
+  const t = tokens[theme.palette.mode];
+
+  return (
+    <Box sx={{ mb: 1.5 }}>
+      <Typography variant="subtitle2" component="h4" sx={{ color: t.textPrimary }}>
+        {title}
+      </Typography>
+      <Typography variant="caption" component="p" sx={{ color: t.textMuted }}>
+        {description}
+      </Typography>
+    </Box>
+  );
+}
+
 export default function DatabaseBackup() {
+  const theme = useTheme();
+  const t = tokens[theme.palette.mode];
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
@@ -178,128 +256,94 @@ export default function DatabaseBackup() {
   };
 
   return (
-    <Paper className="p-6">
-      <Typography variant="h6" className="font-semibold mb-4">
-        Gestión de Base de Datos
-      </Typography>
-      <hr className="mt-2 mb-6" />
-      
-      {error && (
-        <Alert severity="error" className="mb-4">
-          {error}
-        </Alert>
-      )}
-      
-      {success && (
-        <Alert severity="success" className="mb-4">
-          {success}
-        </Alert>
-      )}
-      
-      <Box className="space-y-8">
-        {/* Nueva sección de configuración de base de datos */}
-        <Box>
-          <DatabaseConfig onDatabaseTypeChange={handleDatabaseTypeChange} />
-        </Box>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      {error && <Alert severity="error">{error}</Alert>}
+      {success && <Alert severity="success">{success}</Alert>}
 
-        <Box>
-          <Typography variant="subtitle1" className="font-medium mb-4">
-            Copia de Seguridad de la Base de Datos ({currentDbType === 'local' ? 'Local' : 'Nube'})
-          </Typography>
-          <Box className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Button
-              variant="contained"
-              color="primary"
-              onClick={handleExport}
-              disabled={isExporting}
-              className="w-full"
-            >
-              {isExporting ? (
-                <CircularProgress size={24} className="mr-2" />
-              ) : null}
-              Exportar Base de Datos
-            </Button>
-            <Button
-              variant="contained"
-              color="primary"
-              onClick={handleImport}
-              disabled={isImporting}
-              className="w-full"
-            >
-              {isImporting ? (
-                <CircularProgress size={24} className="mr-2" />
-              ) : null}
-              Importar Base de Datos
-            </Button>
-          </Box>
-        </Box>
+      {/* Nueva sección de configuración de base de datos */}
+      <DatabaseConfig onDatabaseTypeChange={handleDatabaseTypeChange} />
 
-        <Box>
-          <Typography variant="subtitle1" className="font-medium mb-4">
-            Gestión de Tablas
-          </Typography>
-          <Box className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Tooltip title="Elimina todos los datos de la tabla de gastos">
-              <Button
-                variant="outlined"
-                color="warning"
-                onClick={() => handleDeleteStore('expenses')}
-                disabled={isExporting}
-                className="w-full"
-              >
-                Borrar Tabla de Gastos
-              </Button>
-            </Tooltip>
-            <Tooltip title="Elimina todos los datos de la tabla de balance">
-              <Button
-                variant="outlined"
-                color="warning"
-                onClick={() => handleDeleteStore('balance')}
-                disabled={isExporting}
-                className="w-full"
-              >
-                Borrar Tabla de Balance
-              </Button>
-            </Tooltip>
-          </Box>
-        </Box>
+      <Divider />
 
-        <Box>
-          <Typography variant="subtitle1" className="font-medium mb-4">
-            Operaciones Avanzadas
-          </Typography>
-          <Box className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Tooltip title="Reinicia la base de datos manteniendo la estructura">
-              <Button
-                variant="outlined"
-                color="error"
-                onClick={handleResetDatabase}
-                disabled={isResetting}
-                className="w-full"
-              >
-                {isResetting ? (
-                  <CircularProgress size={24} className="mr-2" />
-                ) : null}
-                Reiniciar Base de Datos
-              </Button>
-            </Tooltip>
-            <Tooltip title="Elimina completamente la base de datos">
-              <Button
-                variant="outlined"
-                color="error"
-                onClick={handleDeleteDatabase}
-                disabled={isResetting}
-                className="w-full"
-              >
-                {isResetting ? (
-                  <CircularProgress size={24} className="mr-2" />
-                ) : null}
-                Eliminar Base de Datos
-              </Button>
-            </Tooltip>
-          </Box>
+      <Box>
+        <SubsectionTitle
+          title="Copia de seguridad"
+          description={`Descarga o restaura todos tus datos (${currentDbType === 'local' ? 'Local' : 'Nube'}) en un archivo JSON.`}
+        />
+        <Box sx={{ display: 'flex', gap: 1.5, flexDirection: { xs: 'column', sm: 'row' } }}>
+          <Button
+            variant="contained"
+            onClick={handleExport}
+            disabled={isExporting}
+            startIcon={isExporting ? <CircularProgress size={16} color="inherit" /> : <FileDownloadOutlinedIcon />}
+          >
+            Exportar base de datos
+          </Button>
+          <Button
+            variant="outlined"
+            onClick={handleImport}
+            disabled={isImporting}
+            startIcon={isImporting ? <CircularProgress size={16} color="inherit" /> : <FileUploadOutlinedIcon />}
+          >
+            Importar base de datos
+          </Button>
         </Box>
       </Box>
-    </Paper>
+
+      {/* Zona de peligro */}
+      <Box
+        sx={{
+          borderRadius: '12px',
+          border: `1px solid ${alpha(t.danger, 0.3)}`,
+          backgroundColor: t.dangerSoft,
+          px: { xs: 1.75, sm: 2.25 },
+          pt: 1.75,
+          pb: 0.5,
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: t.danger }}>
+          <WarningAmberRoundedIcon sx={{ fontSize: '1.15rem' }} />
+          <Typography variant="subtitle2" component="h4" sx={{ color: t.danger }}>
+            Zona de peligro
+          </Typography>
+        </Box>
+        <Typography variant="caption" component="p" sx={{ color: t.textSecondary, mt: 0.25, mb: 0.5 }}>
+          Estas acciones borran datos y no se pueden deshacer. Haz antes una copia de seguridad.
+        </Typography>
+        <Box>
+          <DangerAction
+            first
+            title="Borrar tabla de gastos"
+            description="Elimina todos los datos de la tabla de gastos."
+            label="Borrar gastos"
+            onClick={() => handleDeleteStore('expenses')}
+            disabled={isExporting}
+          />
+          <DangerAction
+            title="Borrar tabla de balance"
+            description="Elimina todos los datos de la tabla de balance."
+            label="Borrar balance"
+            onClick={() => handleDeleteStore('balance')}
+            disabled={isExporting}
+          />
+          <DangerAction
+            title="Reiniciar base de datos"
+            description="Borra todos los datos y vuelve a crear la estructura."
+            label="Reiniciar"
+            onClick={handleResetDatabase}
+            disabled={isResetting}
+            loading={isResetting}
+          />
+          <DangerAction
+            title="Eliminar base de datos"
+            description="Elimina la base de datos por completo, sin recrearla."
+            label="Eliminar"
+            onClick={handleDeleteDatabase}
+            disabled={isResetting}
+            loading={isResetting}
+          />
+        </Box>
+      </Box>
+    </Box>
   );
 }

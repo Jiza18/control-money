@@ -1,5 +1,6 @@
-import { Chip } from '@mui/material';
-import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
+import { Box } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
+import { tokens } from '../../theme';
 
 interface AccountChipProps {
   name: string;
@@ -7,38 +8,34 @@ interface AccountChipProps {
   size?: 'small' | 'medium';
 }
 
-// Convierte un hex (#RRGGBB) en rgba con la opacidad indicada
-function hexToRgba(hex: string, alpha: number): string {
-  const clean = hex.replace('#', '');
-  const full = clean.length === 3
-    ? clean.split('').map((c) => c + c).join('')
-    : clean;
-  const r = parseInt(full.substring(0, 2), 16);
-  const g = parseInt(full.substring(2, 4), 16);
-  const b = parseInt(full.substring(4, 6), 16);
-  if ([r, g, b].some((n) => Number.isNaN(n))) return `rgba(148,163,184,${alpha})`;
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
-
 export default function AccountChip({ name, color, size = 'small' }: AccountChipProps) {
+  const theme = useTheme();
+  const t = tokens[theme.palette.mode];
+
   return (
-    <Chip
-      size={size}
-      label={name}
-      icon={<AccountBalanceWalletIcon style={{ color, fontSize: size === 'small' ? '0.85rem' : '1rem' }} />}
+    <Box
+      component="span"
       sx={{
-        backgroundColor: hexToRgba(color, 0.15),
-        color,
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 0.75,
+        height: size === 'small' ? 24 : 28,
+        px: 1,
+        borderRadius: '7px',
+        border: `1px solid ${t.border}`,
+        backgroundColor: t.surface,
+        color: t.textSecondary,
+        fontSize: size === 'small' ? '0.75rem' : '0.8125rem',
         fontWeight: 500,
-        borderRadius: '8px',
-        border: `1px solid ${hexToRgba(color, 0.35)}`,
-        height: size === 'small' ? 22 : 28,
-        '& .MuiChip-icon': { ml: 0.5, mr: -0.25 },
-        '& .MuiChip-label': {
-          px: 0.75,
-          fontSize: size === 'small' ? '0.7rem' : '0.8rem',
-        },
+        whiteSpace: 'nowrap',
+        lineHeight: 1,
       }}
-    />
+    >
+      <Box
+        component="span"
+        sx={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: color, flexShrink: 0 }}
+      />
+      {name}
+    </Box>
   );
 }

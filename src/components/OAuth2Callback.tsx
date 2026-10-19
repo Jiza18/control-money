@@ -1,8 +1,23 @@
-import { useEffect } from 'react';
-import { CircularProgress, Box, Typography } from '@mui/material';
+import { useEffect, useMemo } from 'react';
+import { CircularProgress, Box, Typography, ThemeProvider, CssBaseline } from '@mui/material';
+import { getTheme, tokens } from '../theme';
+import LogoMark from './LogoMark';
 import { saveGoogleSheetsConfig } from '../db/googleSheetsService';
 
+// Esta ruta se renderiza fuera de <App />, así que monta su propio tema con la preferencia guardada
+function getSavedMode(): 'light' | 'dark' {
+  try {
+    const saved = localStorage.getItem('theme');
+    if (saved === 'light' || saved === 'dark') return saved;
+  } catch {}
+  return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
 export default function OAuth2Callback() {
+  const mode = useMemo(getSavedMode, []);
+  const muiTheme = useMemo(() => getTheme(mode), [mode]);
+  const t = tokens[mode];
+
   useEffect(() => {
     const handleOAuthCallback = async () => {
       try {
@@ -60,19 +75,49 @@ export default function OAuth2Callback() {
   }, []);
 
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: '100vh',
-      }}
-    >
-      <CircularProgress />
-      <Typography variant="h6" sx={{ mt: 2 }}>
-        Procesando autenticación...
-      </Typography>
-    </Box>
+    <ThemeProvider theme={muiTheme}>
+      <CssBaseline />
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: '100dvh',
+          px: 2,
+          backgroundColor: t.background,
+        }}
+      >
+        <Box
+          role="status"
+          aria-live="polite"
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 2,
+            width: '100%',
+            maxWidth: 360,
+            px: 3,
+            py: 4,
+            borderRadius: '16px',
+            border: `1px solid ${t.border}`,
+            backgroundColor: t.surface,
+            boxShadow: t.shadowMd,
+            textAlign: 'center',
+          }}
+        >
+          <LogoMark size={40} />
+          <CircularProgress size={28} thickness={4.5} />
+          <Box>
+            <Typography variant="h6" sx={{ color: t.textPrimary }}>
+              Procesando autenticación...
+            </Typography>
+            <Typography variant="body2" sx={{ color: t.textSecondary, mt: 0.5 }}>
+              Conectando con Google. Volverás a Configuración en unos segundos.
+            </Typography>
+          </Box>
+        </Box>
+      </Box>
+    </ThemeProvider>
   );
 }

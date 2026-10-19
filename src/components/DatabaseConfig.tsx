@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import CloudQueueIcon from '@mui/icons-material/CloudQueue';
-import StorageIcon from '@mui/icons-material/Storage';
-import SyncIcon from '@mui/icons-material/Sync';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
-import SettingsIcon from '@mui/icons-material/Settings';
+import { Alert, Box, Button, TextField, Typography } from '@mui/material';
+import { keyframes, useTheme } from '@mui/material/styles';
+import CloudOutlinedIcon from '@mui/icons-material/CloudOutlined';
+import StorageOutlinedIcon from '@mui/icons-material/StorageOutlined';
+import SyncRoundedIcon from '@mui/icons-material/SyncRounded';
+import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
+import RadioButtonUncheckedRoundedIcon from '@mui/icons-material/RadioButtonUncheckedRounded';
+import { tokens } from '../theme';
 import { createRepositoryFromEnv, getRepositoryFactory } from '../db/repositories/repositoryFactory';
 import { getSyncService } from '../db/syncService';
 import { setPreferredDatabaseType } from '../db/repositoryAdapter';
@@ -16,7 +18,14 @@ interface DatabaseConfigProps {
   onDatabaseTypeChange?: (type: DatabaseType) => void;
 }
 
+const spin = keyframes`
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+`;
+
 export const DatabaseConfig: React.FC<DatabaseConfigProps> = ({ onDatabaseTypeChange }) => {
+  const theme = useTheme();
+  const t = tokens[theme.palette.mode];
   const [currentDbType, setCurrentDbType] = useState<DatabaseType>('local');
   const [isConnected, setIsConnected] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -147,194 +156,238 @@ export const DatabaseConfig: React.FC<DatabaseConfigProps> = ({ onDatabaseTypeCh
   };
 
   const ConnectionStatus = () => (
-    <div className="flex items-center gap-2 text-sm">
-      {isConnected ? (
-        <>
-            <CheckCircleIcon className="w-4 h-4 text-green-500" />
-          <span className="text-green-700">Conectado</span>
-        </>
-      ) : (
-        <>
-            <ErrorOutlineIcon className="w-4 h-4 text-red-500" />
-          <span className="text-red-700">Desconectado</span>
-        </>
-      )}
-    </div>
+    <Box
+      component="span"
+      sx={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 0.75,
+        height: 26,
+        px: 1.25,
+        borderRadius: 99,
+        fontSize: '0.75rem',
+        fontWeight: 600,
+        backgroundColor: isConnected ? t.successSoft : t.dangerSoft,
+        color: isConnected ? t.success : t.danger,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      <Box component="span" sx={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: 'currentColor' }} />
+      {isConnected ? 'Conectado' : 'Desconectado'}
+    </Box>
   );
 
   const SyncResultDisplay = () => {
     if (!showSyncResult || !syncResult) return null;
 
     return (
-      <div className={`mt-4 p-3 rounded-lg border ${
-        syncResult.success 
-          ? 'bg-green-50 border-green-200 text-green-800' 
-          : 'bg-red-50 border-red-200 text-red-800'
-      }`}>
-        <div className="flex items-center gap-2 mb-2">
-          {syncResult.success ? (
-            <CheckCircleIcon className="w-4 h-4" />
-          ) : (
-            <ErrorOutlineIcon className="w-4 h-4" />
-          )}
-          <span className="font-medium">
-            {syncResult.success ? 'Sincronización exitosa' : 'Error en sincronización'}
-          </span>
-        </div>
-        
+      <Alert severity={syncResult.success ? 'success' : 'error'} sx={{ alignItems: 'flex-start' }}>
+        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+          {syncResult.success ? 'Sincronización exitosa' : 'Error en sincronización'}
+        </Typography>
+
         {syncResult.success && (
-          <p className="text-sm">
+          <Typography variant="body2">
             {syncResult.recordsTransferred} registros transferidos
-          </p>
+          </Typography>
         )}
-        
+
         {syncResult.error && (
-          <p className="text-sm">{syncResult.error}</p>
+          <Typography variant="body2">{syncResult.error}</Typography>
         )}
-        
+
         {syncResult.conflicts && syncResult.conflicts.length > 0 && (
-          <div className="mt-2">
-            <p className="text-sm font-medium">Conflictos detectados:</p>
-            <ul className="text-xs mt-1 space-y-1">
+          <Box sx={{ mt: 1 }}>
+            <Typography variant="body2" sx={{ fontWeight: 600 }}>Conflictos detectados:</Typography>
+            <Box component="ul" sx={{ m: 0, mt: 0.5, pl: 2.5, fontSize: '0.75rem' }}>
               {syncResult.conflicts.map((conflict, index) => (
                 <li key={index}>
                   Tabla: {conflict.table}, Registro: {conflict.recordId}
                 </li>
               ))}
-            </ul>
-          </div>
+            </Box>
+          </Box>
         )}
-      </div>
+      </Alert>
     );
   };
 
+  const dbOptions: { type: DatabaseType; title: string; description: string; icon: React.ReactNode }[] = [
+    { type: 'local', title: 'Local', description: 'IndexedDB en el navegador', icon: <StorageOutlinedIcon /> },
+    { type: 'turso', title: 'Nube', description: 'Base de datos Turso', icon: <CloudOutlinedIcon /> },
+  ];
+
+  const syncDisabled = isSyncing || !isConnected;
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-2 mb-4">
-            <SettingsIcon className="w-5 h-5 text-gray-600 dark:text-gray-300" />
-        <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100">
-          Configuración de Base de Datos
-        </h3>
-      </div>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+      <Box>
+        <Typography variant="subtitle2" component="h4" sx={{ color: t.textPrimary }}>
+          Almacenamiento
+        </Typography>
+        <Typography variant="caption" component="p" sx={{ color: t.textMuted }}>
+          Elige dónde se guardan tus datos.
+        </Typography>
+      </Box>
 
       {/* Selector de tipo de base de datos */}
-      <div className="space-y-3">
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-          Tipo de Base de Datos
-        </label>
-        
-        <div className="grid grid-cols-2 gap-3">
-          <button
-            onClick={() => handleDatabaseTypeChange('local')}
-            className={`p-4 rounded-lg border-2 transition-all duration-200 ${
-              currentDbType === 'local'
-                ? 'border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-900/30 dark:text-blue-100'
-                : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:border-gray-600'
-            }`}
-          >
-            <div className="flex flex-col items-center gap-2">
-            <StorageIcon className="w-6 h-6" />
-              <span className="font-medium">Local</span>
-              <span className="text-xs text-center">
-                IndexedDB en el navegador
-              </span>
-            </div>
-          </button>
-
-          <button
-            onClick={() => handleDatabaseTypeChange('turso')}
-            className={`p-4 rounded-lg border-2 transition-all duration-200 ${
-              currentDbType === 'turso'
-                ? 'border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-900/30 dark:text-blue-100'
-                : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:border-gray-600'
-            }`}
-          >
-            <div className="flex flex-col items-center gap-2">
-            <CloudQueueIcon className="w-6 h-6" />
-              <span className="font-medium">Nube</span>
-              <span className="text-xs text-center">
-                Base de datos Turso
-              </span>
-            </div>
-          </button>
-        </div>
-      </div>
+      <Box
+        role="radiogroup"
+        aria-label="Tipo de base de datos"
+        sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}
+      >
+        {dbOptions.map((opt) => {
+          const selected = currentDbType === opt.type;
+          return (
+            <Box
+              key={opt.type}
+              component="button"
+              type="button"
+              role="radio"
+              aria-checked={selected}
+              onClick={() => handleDatabaseTypeChange(opt.type)}
+              sx={{
+                all: 'unset',
+                boxSizing: 'border-box',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1.5,
+                p: 1.75,
+                minHeight: 64,
+                borderRadius: '12px',
+                border: `1px solid ${selected ? t.primary : t.border}`,
+                backgroundColor: selected ? t.primarySoft : t.surface,
+                boxShadow: selected ? `inset 0 0 0 1px ${t.primary}` : 'none',
+                transition: 'border-color .15s, background-color .15s',
+                '&:hover': { borderColor: selected ? t.primary : t.borderStrong },
+                '&:focus-visible': { outline: `2px solid ${t.primary}`, outlineOffset: 2 },
+              }}
+            >
+              <Box
+                sx={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: '10px',
+                  flexShrink: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: selected ? t.surface : t.surfaceSoft,
+                  color: selected ? t.primary : t.textSecondary,
+                  '& svg': { fontSize: '1.2rem' },
+                }}
+              >
+                {opt.icon}
+              </Box>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography variant="subtitle2" sx={{ color: t.textPrimary, lineHeight: 1.3 }}>
+                  {opt.title}
+                </Typography>
+                <Typography variant="caption" sx={{ color: t.textMuted, lineHeight: 1.3 }}>
+                  {opt.description}
+                </Typography>
+              </Box>
+              {selected ? (
+                <CheckCircleRoundedIcon sx={{ color: t.primary, fontSize: '1.25rem' }} />
+              ) : (
+                <RadioButtonUncheckedRoundedIcon sx={{ color: t.borderStrong, fontSize: '1.25rem' }} />
+              )}
+            </Box>
+          );
+        })}
+      </Box>
 
       {/* Estado de conexión */}
-      <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-          Estado de conexión:
-        </span>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 1,
+          px: 2,
+          py: 1.25,
+          borderRadius: '12px',
+          backgroundColor: t.surfaceSoft,
+        }}
+      >
+        <Typography variant="body2" sx={{ color: t.textSecondary, fontWeight: 500 }}>
+          Estado de conexión
+        </Typography>
         <ConnectionStatus />
-      </div>
+      </Box>
 
       {/* Configuración de Turso */}
       {currentDbType === 'turso' && (
-        <div className="space-y-3 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-          <h4 className="font-medium text-blue-800 dark:text-blue-200">Configuración de Turso</h4>
-          
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-blue-700 dark:text-blue-200">
-              URL de la Base de Datos
-            </label>
-            <input
-              type="text"
-              value={tursoConfig.url}
-              onChange={(e) => setTursoConfig(prev => ({ ...prev, url: e.target.value }))}
-              placeholder="libsql://your-database.turso.io"
-              className="w-full px-3 py-2 border border-blue-300 dark:border-blue-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100"
-            />
-          </div>
-          
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-blue-700 dark:text-blue-200">
-              Token de Autenticación
-            </label>
-            <input
-              type="password"
-              value={tursoConfig.authToken}
-              onChange={(e) => setTursoConfig(prev => ({ ...prev, authToken: e.target.value }))}
-              placeholder="eyJ..."
-              className="w-full px-3 py-2 border border-blue-300 dark:border-blue-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100"
-            />
-          </div>
-          
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleSaveTursoConfig}
-              className="px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors"
-            >
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 2,
+            p: 2,
+            borderRadius: '12px',
+            border: `1px solid ${t.border}`,
+          }}
+        >
+          <Typography variant="subtitle2" sx={{ color: t.textPrimary }}>
+            Credenciales de Turso
+          </Typography>
+          <TextField
+            label="URL de la base de datos"
+            value={tursoConfig.url}
+            onChange={(e) => setTursoConfig(prev => ({ ...prev, url: e.target.value }))}
+            placeholder="libsql://your-database.turso.io"
+            fullWidth
+            autoComplete="off"
+          />
+          <TextField
+            label="Token de autenticación"
+            type="password"
+            value={tursoConfig.authToken}
+            onChange={(e) => setTursoConfig(prev => ({ ...prev, authToken: e.target.value }))}
+            placeholder="eyJ..."
+            fullWidth
+            autoComplete="off"
+          />
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: { xs: 'stretch', sm: 'center' },
+              flexDirection: { xs: 'column', sm: 'row' },
+              gap: 1.5,
+            }}
+          >
+            <Button variant="outlined" onClick={handleSaveTursoConfig} sx={{ flexShrink: 0 }}>
               Guardar credenciales en el dispositivo
-            </button>
-            <span className="text-xs text-blue-700 dark:text-blue-300">
+            </Button>
+            <Typography variant="caption" sx={{ color: t.textMuted }}>
               Se guardan de forma local (IndexedDB) y NO se sincronizan.
-            </span>
-          </div>
-        </div>
+            </Typography>
+          </Box>
+        </Box>
       )}
 
       {/* Botón de sincronización */}
-      <div className="space-y-3">
-        <button
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <Button
+          variant="contained"
+          size="large"
           onClick={handleSync}
-          disabled={isSyncing || !isConnected}
-          className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition-all duration-200 ${
-            isSyncing || !isConnected
-              ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-              : 'bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800'
-          }`}
+          disabled={syncDisabled}
+          startIcon={
+            <SyncRoundedIcon sx={isSyncing ? { animation: `${spin} 1s linear infinite` } : undefined} />
+          }
+          sx={{ alignSelf: { xs: 'stretch', sm: 'flex-start' } }}
         >
-            <SyncIcon className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
-          {isSyncing ? 'Sincronizando...' : 'Sincronizar Bases de Datos'}
-        </button>
-        
-        <p className="text-xs text-gray-600 dark:text-gray-400 text-center">
-          Sincroniza los datos entre la base de datos local y la nube
-        </p>
-      </div>
+          {isSyncing ? 'Sincronizando...' : 'Sincronizar bases de datos'}
+        </Button>
+        <Typography variant="caption" sx={{ color: t.textMuted }}>
+          Sincroniza los datos entre la base de datos local y la nube.
+        </Typography>
+      </Box>
 
       {/* Resultado de sincronización */}
       <SyncResultDisplay />
-    </div>
+    </Box>
   );
 };

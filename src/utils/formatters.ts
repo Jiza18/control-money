@@ -7,11 +7,29 @@
  * @param amount - Cantidad a formatear
  * @returns String formateado como moneda
  */
+// En es-ES, Intl no agrupa los miles por debajo de 10.000 ("9000,00 €") salvo con 'always'
+const currencyFormatter = new Intl.NumberFormat('es-ES', {
+  style: 'currency',
+  currency: 'EUR',
+  useGrouping: 'always',
+} as unknown as Intl.NumberFormatOptions);
+
 export const formatCurrency = (amount: number): string => {
-  return new Intl.NumberFormat('es-ES', {
-    style: 'currency',
-    currency: 'EUR'
-  }).format(amount);
+  return currencyFormatter.format(amount);
+};
+
+const compactFormatter = new Intl.NumberFormat('es-ES', {
+  style: 'currency',
+  currency: 'EUR',
+  notation: 'compact',
+  maximumFractionDigits: 1,
+});
+
+/**
+ * Formatea un importe de forma compacta para ejes de gráficas ("1,2 mil €")
+ */
+export const formatCurrencyCompact = (amount: number): string => {
+  return compactFormatter.format(amount);
 };
 
 /**
