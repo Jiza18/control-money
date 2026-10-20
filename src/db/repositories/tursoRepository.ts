@@ -7,6 +7,7 @@ import {
   InvestmentRepository, 
   GoogleSheetsRepository,
   AccountRepository,
+  SavingsMovementRepository,
   DatabaseOperations 
 } from './interfaces';
 import { 
@@ -16,7 +17,8 @@ import {
   Investment, 
   GoogleSheetsConfig,
   PaymentRecord,
-  Account
+  Account,
+  SavingsMovement
 } from '../config';
 import { 
   dateToString, 
@@ -338,8 +340,9 @@ class TursoSavingsRepository implements SavingsRepository {
 
   async create(goal: Omit<SavingsGoal, 'id'>): Promise<SavingsGoal> {
     const result = await this.client.execute({
-      sql: `INSERT INTO savings_goals (name, description, target_amount, current_amount, monthly_contribution, start_date, target_date, completed) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
+      sql: `INSERT INTO savings_goals (name, description, target_amount, current_amount, monthly_contribution, start_date, target_date, completed,
+            interest_rate, interest_frequency, interest_tax_rate) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
       args: [
         goal.name,
         goal.description,
@@ -348,7 +351,10 @@ class TursoSavingsRepository implements SavingsRepository {
         goal.monthlyContribution,
         dateToString(goal.startDate),
         goal.targetDate ? dateToString(goal.targetDate) : null,
-        booleanToNumber(goal.completed)
+        booleanToNumber(goal.completed),
+        goal.interestRate ?? null,
+        goal.interestFrequency ?? null,
+        goal.interestTaxRate ?? null
       ]
     });
 
@@ -358,7 +364,8 @@ class TursoSavingsRepository implements SavingsRepository {
   async update(goal: SavingsGoal): Promise<SavingsGoal> {
     await this.client.execute({
       sql: `UPDATE savings_goals SET name = ?, description = ?, target_amount = ?, current_amount = ?, 
-            monthly_contribution = ?, start_date = ?, target_date = ?, completed = ?, updated_at = CURRENT_TIMESTAMP 
+            monthly_contribution = ?, start_date = ?, target_date = ?, completed = ?,
+            interest_rate = ?, interest_frequency = ?, interest_tax_rate = ?, updated_at = CURRENT_TIMESTAMP 
             WHERE id = ?`,
       args: [
         goal.name,
@@ -369,6 +376,9 @@ class TursoSavingsRepository implements SavingsRepository {
         dateToString(goal.startDate),
         goal.targetDate ? dateToString(goal.targetDate) : null,
         booleanToNumber(goal.completed),
+        goal.interestRate ?? null,
+        goal.interestFrequency ?? null,
+        goal.interestTaxRate ?? null,
         goal.id!
       ]
     });
@@ -422,17 +432,121 @@ class TursoSavingsRepository implements SavingsRepository {
   }
 
   private mapRowToSavingsGoal(row: any): SavingsGoal {
-    return {
-      id: row.id as number,
-      name: row.name as string,
-      description: row.description as string,
-      targetAmount: row.target_amount as number,
-      currentAmount: row.current_amount as number,
-      monthlyContribution: row.monthly_contribution as number,
-      startDate: stringToDate(row.start_date as string),
-      targetDate: row.target_date ? stringToDate(row.target_date as string) : undefined,
-      completed: numberToBoolean(row.completed as number)
-    };
+    return mapRowToSavingsGoal(row);
+  }
+}
+
+function mapRowToSavingsGoal(row: any): SavingsGoal {
+  return {
+    id: row.id as number,
+    name: row.name as string,
+    description: row.description as string,
+    targetAmount: row.target_amount as number,
+    currentAmount: row.current_amount as number,
+    monthlyContribution: row.monthly_contribution as number,
+    startDate: stringToDate(row.start_date as string),
+    targetDate: row.target_date ? stringToDate(row.target_date as string) : undefined,
+    completed: numberToBoolean(row.completed as number),
+    interestRate: row.interest_rate != null ? (row.interest_rate as number) : undefined,
+    interestFrequency: row.interest_frequency ? (row.interest_frequency as SavingsGoal['interestFrequency']) : undefined,
+    interestTaxRate: row.interest_tax_rate != null ? (row.interest_tax_rate as number) : undefined
+  };
+}
+
+function mapRowToSavingsMovement(row: any): SavingsMovement {
+  return {
+    id: row.id as number,
+    goalId: row.goal_id as number,
+    type: row.type as SavingsMovement['type'],
+    amount: row.amount as number,
+    date: stringToDate(row.date as string),
+    note: row.note ? (row.note as string) : undefined,
+    affectsBalance: numberToBoolean(row.affects_balance as number)
+  };
+}
+
+class TursoSavingsMovementRepository implements SavingsMovementRepository {
+  private client: Client;
+
+  constructor(client: Client) {
+    this.client = client;
+  }
+
+  async create(movement: Omit<SavingsMovement, 'id'>): Promise<SavingsMovement> {
+    const result = await this.client.execute({
+      sql: `INSERT INTO savings_movements (goal_id, type, amount, date, note, affects_balance)
+            VALUES (?, ?, ?, ?, ?, ?) RETURNING *`,
+      args: [
+        movement.goalId,
+        movement.type,
+        movement.amount,
+        dateToString(movement.date),
+        movement.note || null,
+        booleanToNumber(movement.affectsBalance)
+      ]
+    });
+
+    return mapRowToSavingsMovement(result.rows[0]);
+  }
+
+  async update(movement: SavingsMovement): Promise<SavingsMovement> {
+    await this.client.execute({
+      sql: `UPDATE savings_movements SET goal_id = ?, type = ?, amount = ?, date = ?, note = ?, affects_balance = ?
+            WHERE id = ?`,
+      args: [
+        movement.goalId,
+        movement.type,
+        movement.amount,
+        dateToString(movement.date),
+        movement.note || null,
+        booleanToNumber(movement.affectsBalance),
+        movement.id!
+      ]
+    });
+
+    return movement;
+  }
+
+  async delete(id: number): Promise<boolean> {
+    try {
+      await this.client.execute({
+        sql: 'DELETE FROM savings_movements WHERE id = ?',
+        args: [id]
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async findById(id: number): Promise<SavingsMovement | undefined> {
+    const result = await this.client.execute({
+      sql: 'SELECT * FROM savings_movements WHERE id = ?',
+      args: [id]
+    });
+
+    return result.rows[0] ? mapRowToSavingsMovement(result.rows[0]) : undefined;
+  }
+
+  async findAll(): Promise<SavingsMovement[]> {
+    const result = await this.client.execute('SELECT * FROM savings_movements ORDER BY date DESC, id DESC');
+    return result.rows.map(row => mapRowToSavingsMovement(row));
+  }
+
+  async findByGoal(goalId: number): Promise<SavingsMovement[]> {
+    const result = await this.client.execute({
+      sql: 'SELECT * FROM savings_movements WHERE goal_id = ? ORDER BY date DESC, id DESC',
+      args: [goalId]
+    });
+
+    return result.rows.map(row => mapRowToSavingsMovement(row));
+  }
+
+  async deleteByGoal(goalId: number): Promise<void> {
+    await this.client.execute({
+      sql: 'DELETE FROM savings_movements WHERE goal_id = ?',
+      args: [goalId]
+    });
   }
 }
 
@@ -772,17 +886,11 @@ class TursoDatabaseOperations implements DatabaseOperations {
 
     // Exportar savings
     const savingsResult = await this.client.execute('SELECT * FROM savings_goals');
-    data.savings = savingsResult.rows.map(row => ({
-      id: row.id,
-      name: row.name,
-      description: row.description,
-      targetAmount: row.target_amount,
-      currentAmount: row.current_amount,
-      monthlyContribution: row.monthly_contribution,
-      startDate: stringToDate(row.start_date as string),
-      targetDate: row.target_date ? stringToDate(row.target_date as string) : undefined,
-      completed: numberToBoolean(row.completed as number)
-    }));
+    data.savings = savingsResult.rows.map(row => mapRowToSavingsGoal(row));
+
+    // Exportar movimientos de ahorro
+    const movementsResult = await this.client.execute('SELECT * FROM savings_movements');
+    data.savingsMovements = movementsResult.rows.map(row => mapRowToSavingsMovement(row));
 
     // Exportar investments
     const investmentsResult = await this.client.execute('SELECT * FROM investments');
@@ -870,13 +978,15 @@ class TursoDatabaseOperations implements DatabaseOperations {
       }
     }
 
-    // Importar savings
+    // Importar savings conservando el id: savings_movements.goal_id apunta a él
     if (data.savings) {
       for (const saving of data.savings) {
         await this.client.execute({
-          sql: `INSERT INTO savings_goals (name, description, target_amount, current_amount, monthly_contribution, start_date, target_date, completed) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          sql: `INSERT INTO savings_goals (id, name, description, target_amount, current_amount, monthly_contribution, start_date, target_date, completed,
+                interest_rate, interest_frequency, interest_tax_rate) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           args: [
+            saving.id ?? null,
             saving.name,
             saving.description,
             saving.targetAmount,
@@ -884,7 +994,28 @@ class TursoDatabaseOperations implements DatabaseOperations {
             saving.monthlyContribution,
             dateToString(saving.startDate),
             saving.targetDate ? dateToString(saving.targetDate) : null,
-            booleanToNumber(saving.completed)
+            booleanToNumber(saving.completed),
+            saving.interestRate ?? null,
+            saving.interestFrequency ?? null,
+            saving.interestTaxRate ?? null
+          ]
+        });
+      }
+    }
+
+    // Importar movimientos de ahorro
+    if (data.savingsMovements) {
+      for (const movement of data.savingsMovements) {
+        await this.client.execute({
+          sql: `INSERT INTO savings_movements (goal_id, type, amount, date, note, affects_balance)
+                VALUES (?, ?, ?, ?, ?, ?)`,
+          args: [
+            movement.goalId,
+            movement.type,
+            movement.amount,
+            dateToString(movement.date),
+            movement.note || null,
+            booleanToNumber(Boolean(movement.affectsBalance))
           ]
         });
       }
@@ -953,6 +1084,7 @@ class TursoDatabaseOperations implements DatabaseOperations {
     await this.client.execute('DELETE FROM expenses');
     await this.client.execute('DELETE FROM balance');
     await this.client.execute('DELETE FROM savings_goals');
+    await this.client.execute('DELETE FROM savings_movements');
     await this.client.execute('DELETE FROM investments');
     await this.client.execute('DELETE FROM accounts');
     await this.client.execute('DELETE FROM google_sheets_config');
@@ -985,6 +1117,7 @@ export class TursoRepository implements DatabaseRepository {
   public savings: SavingsRepository;
   public investments: InvestmentRepository;
   public accounts: AccountRepository;
+  public savingsMovements: SavingsMovementRepository;
   public googleSheets: GoogleSheetsRepository;
   public operations: DatabaseOperations;
 
@@ -994,6 +1127,7 @@ export class TursoRepository implements DatabaseRepository {
     this.savings = new TursoSavingsRepository(client);
     this.investments = new TursoInvestmentRepository(client);
     this.accounts = new TursoAccountRepository(client);
+    this.savingsMovements = new TursoSavingsMovementRepository(client);
     this.googleSheets = new TursoGoogleSheetsRepository(client);
     this.operations = new TursoDatabaseOperations(client);
   }

@@ -7,6 +7,7 @@ import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined
 import { getCurrentBalance, updateBalance } from '../db';
 import { Balance } from '../db/config';
 import { tokens } from '../theme';
+import { BALANCE_CHANGED_EVENT } from '../db/savingsMovementsService';
 
 export default function BalanceForm() {
   const theme = useTheme();
@@ -28,7 +29,12 @@ export default function BalanceForm() {
 
     const handler = () => loadBalance();
     window.addEventListener('dbTypeChanged', handler as any);
-    return () => window.removeEventListener('dbTypeChanged', handler as any);
+    // Aportaciones y retiradas de ahorros cambian el saldo desde fuera
+    window.addEventListener(BALANCE_CHANGED_EVENT, handler);
+    return () => {
+      window.removeEventListener('dbTypeChanged', handler as any);
+      window.removeEventListener(BALANCE_CHANGED_EVENT, handler);
+    };
   }, []);
 
   const handleBalanceUpdate = async (updates: Partial<Balance>) => {

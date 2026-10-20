@@ -100,6 +100,20 @@ CREATE TABLE IF NOT EXISTS accounts (
   updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Movimientos de ahorro (aportaciones, retiradas e intereses), goal_id apunta a savings_goals.id
+CREATE TABLE IF NOT EXISTS savings_movements (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  goal_id INTEGER NOT NULL,
+  type TEXT NOT NULL CHECK (type IN ('deposit', 'withdrawal', 'interest')),
+  amount REAL NOT NULL,
+  date TEXT NOT NULL,
+  note TEXT,
+  affects_balance BOOLEAN NOT NULL DEFAULT 0,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_savings_movements_goal ON savings_movements(goal_id);
+
 -- Tabla de configuración de Google Sheets
 CREATE TABLE IF NOT EXISTS google_sheets_config (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -158,20 +172,28 @@ export async function initializeTursoDatabase(client: Client): Promise<void> {
       }
     }
 
-    // Migración: añadir columna account_id a tablas expenses existentes.
+    // Migraciones: columnas añadidas a tablas existentes.
     // SQLite no soporta "ADD COLUMN IF NOT EXISTS", así que ignoramos el error
     // "duplicate column name" cuando la columna ya existe.
-    try {
-      await client.execute('ALTER TABLE expenses ADD COLUMN account_id INTEGER');
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      if (!/duplicate column name/i.test(message)) {
-        throw err;
+    const columnMigrations = [
+      'ALTER TABLE expenses ADD COLUMN account_id INTEGER',
+      'ALTER TABLE savings_goals ADD COLUMN interest_rate REAL',
+      'ALTER TABLE savings_goals ADD COLUMN interest_frequency TEXT',
+      'ALTER TABLE savings_goals ADD COLUMN interest_tax_rate REAL',
+    ];
+    for (const migration of columnMigrations) {
+      try {
+        await client.execute(migration);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (!/duplicate column name/i.test(message)) {
+          throw err;
+        }
       }
     }
 
     // Inicializar metadatos de sincronización
-    const tables = ['expenses', 'balance', 'savings_goals', 'investments', 'accounts', 'google_sheets_config'];
+    const tables = ['expenses', 'balance', 'savings_goals', 'savings_movements', 'investments', 'accounts', 'google_sheets_config'];
     
     for (const table of tables) {
       await client.execute({

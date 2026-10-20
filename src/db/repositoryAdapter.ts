@@ -126,6 +126,7 @@ export async function updateSavingsGoal(goal: SavingsGoal): Promise<SavingsGoal>
 export async function deleteSavingsGoal(id: number): Promise<void> {
   const repo = await getCurrentRepository();
   await repo.savings.delete(id);
+  await repo.savingsMovements.deleteByGoal(id);
 }
 
 export async function getSavingsGoalById(id: number): Promise<SavingsGoal | undefined> {

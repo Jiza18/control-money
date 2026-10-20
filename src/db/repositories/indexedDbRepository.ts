@@ -6,6 +6,7 @@ import {
   InvestmentRepository, 
   GoogleSheetsRepository,
   AccountRepository,
+  SavingsMovementRepository,
   DatabaseOperations 
 } from './interfaces';
 import { 
@@ -15,6 +16,7 @@ import {
   Investment, 
   GoogleSheetsConfig, 
   Account,
+  SavingsMovement,
   getDB 
 } from '../config';
 import { 
@@ -329,6 +331,57 @@ class IndexedDbAccountRepository implements AccountRepository {
   }
 }
 
+// Movimientos ordenados del más reciente al más antiguo
+const byDateDesc = (a: SavingsMovement, b: SavingsMovement) =>
+  new Date(b.date).getTime() - new Date(a.date).getTime() || (b.id ?? 0) - (a.id ?? 0);
+
+class IndexedDbSavingsMovementRepository implements SavingsMovementRepository {
+  async create(movement: Omit<SavingsMovement, 'id'>): Promise<SavingsMovement> {
+    const db = await getDB();
+    const id = await db.add('savingsMovements', movement as SavingsMovement);
+    return { ...movement, id } as SavingsMovement;
+  }
+
+  async update(movement: SavingsMovement): Promise<SavingsMovement> {
+    const db = await getDB();
+    await db.put('savingsMovements', movement);
+    return movement;
+  }
+
+  async delete(id: number): Promise<boolean> {
+    try {
+      const db = await getDB();
+      await db.delete('savingsMovements', id);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async findById(id: number): Promise<SavingsMovement | undefined> {
+    const db = await getDB();
+    return await db.get('savingsMovements', id);
+  }
+
+  async findAll(): Promise<SavingsMovement[]> {
+    const db = await getDB();
+    return (await db.getAll('savingsMovements')).sort(byDateDesc);
+  }
+
+  async findByGoal(goalId: number): Promise<SavingsMovement[]> {
+    const db = await getDB();
+    return (await db.getAllFromIndex('savingsMovements', 'goalId', goalId)).sort(byDateDesc);
+  }
+
+  async deleteByGoal(goalId: number): Promise<void> {
+    const db = await getDB();
+    const tx = db.transaction('savingsMovements', 'readwrite');
+    const keys = await tx.store.index('goalId').getAllKeys(goalId);
+    await Promise.all(keys.map((key) => tx.store.delete(key)));
+    await tx.done;
+  }
+}
+
 class IndexedDbDatabaseOperations implements DatabaseOperations {
   async exportData(): Promise<Record<string, any[]>> {
     return await exportDatabase();
@@ -344,6 +397,7 @@ class IndexedDbDatabaseOperations implements DatabaseOperations {
     await clearStore('savings');
     await clearStore('investments');
     await clearStore('accounts');
+    await clearStore('savingsMovements');
     await clearStore('sheetConfig');
   }
 
@@ -374,6 +428,7 @@ export class IndexedDbRepository implements DatabaseRepository {
   public savings: SavingsRepository;
   public investments: InvestmentRepository;
   public accounts: AccountRepository;
+  public savingsMovements: SavingsMovementRepository;
   public googleSheets: GoogleSheetsRepository;
   public operations: DatabaseOperations;
 
@@ -383,6 +438,7 @@ export class IndexedDbRepository implements DatabaseRepository {
     this.savings = new IndexedDbSavingsRepository();
     this.investments = new IndexedDbInvestmentRepository();
     this.accounts = new IndexedDbAccountRepository();
+    this.savingsMovements = new IndexedDbSavingsMovementRepository();
     this.googleSheets = new IndexedDbGoogleSheetsRepository();
     this.operations = new IndexedDbDatabaseOperations();
   }

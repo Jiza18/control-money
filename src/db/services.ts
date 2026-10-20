@@ -31,6 +31,10 @@ export async function exportDatabase() {
     data.accounts = await db.getAll('accounts');
   }
 
+  if (db.objectStoreNames.contains('savingsMovements')) {
+    data.savingsMovements = await db.getAll('savingsMovements');
+  }
+
   return data;
 }
 
@@ -150,6 +154,24 @@ export async function importDatabase(data: Record<string, any[]>) {
       const normalized = {
         ...account,
         createdAt: account?.createdAt instanceof Date ? account.createdAt : new Date(account?.createdAt)
+      };
+      await store.add(normalized);
+    }
+
+    await tx.done;
+  }
+
+  if (data.savingsMovements && db.objectStoreNames.contains('savingsMovements')) {
+    const tx = db.transaction('savingsMovements', 'readwrite');
+    const store = tx.objectStore('savingsMovements');
+
+    await store.clear();
+
+    for (const movement of data.savingsMovements) {
+      const normalized = {
+        ...movement,
+        date: movement?.date instanceof Date ? movement.date : new Date(movement?.date),
+        affectsBalance: Boolean(movement?.affectsBalance)
       };
       await store.add(normalized);
     }

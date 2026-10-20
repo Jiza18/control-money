@@ -46,6 +46,23 @@ export interface SavingsGoal {
   startDate: Date;
   targetDate?: Date;
   completed: boolean;
+  // Ahorro con interés compuesto (cuenta remunerada, depósito...). Sin interestRate es un ahorro manual.
+  interestRate?: number; // Tipo de interés anual en porcentaje (TIN)
+  interestFrequency?: InterestFrequency; // Cada cuánto capitaliza el banco los intereses
+  interestTaxRate?: number; // Retención sobre los intereses en porcentaje (0 si no hay)
+}
+
+export type InterestFrequency = 'annual' | 'semi-annual' | 'quarterly' | 'monthly';
+
+// Movimiento de un ahorro. El saldo de la meta (currentAmount) se mantiene al aplicar cada movimiento.
+export interface SavingsMovement {
+  id?: number;
+  goalId: number;
+  type: 'deposit' | 'withdrawal' | 'interest';
+  amount: number; // Siempre positivo; el tipo decide el signo
+  date: Date;
+  note?: string;
+  affectsBalance: boolean; // Si se descontó (aportación) o sumó (retirada) al saldo actual
 }
 
 export interface Investment {
@@ -77,7 +94,7 @@ export interface AIConfig {
 }
 
 const DB_NAME = 'expense-tracker';
-const DB_VERSION = 80; // v80: added accounts store
+const DB_VERSION = 81; // v81: added savingsMovements store
 
 export interface GoogleSheetsConfig {
   id?: number;
@@ -146,6 +163,11 @@ export type ExpenseDB = {
     key: number;
     value: Account;
     indexes: { 'name': string; 'createdAt': Date };
+  };
+  savingsMovements: {
+    key: number;
+    value: SavingsMovement;
+    indexes: { 'goalId': number; 'date': Date };
   };
 };
 
@@ -232,6 +254,15 @@ function setupAccountsStore(db: IDBPDatabase<ExpenseDB> | IDBDatabase) {
   }
 }
 
+// Store para movimientos de ahorro (aportaciones, retiradas e intereses)
+function setupSavingsMovementsStore(db: IDBPDatabase<ExpenseDB> | IDBDatabase) {
+  if (!db.objectStoreNames.contains('savingsMovements')) {
+    const store = db.createObjectStore('savingsMovements', { keyPath: 'id', autoIncrement: true });
+    store.createIndex('goalId', 'goalId');
+    store.createIndex('date', 'date');
+  }
+}
+
 // Función para manejar la migración de datos después de la actualización
 // async function handlePostUpgradeMigrations(db: IDBPDatabase<ExpenseDB>, oldVersion: number) {
 //   try {
@@ -299,6 +330,7 @@ export async function deleteDatabase(): Promise<boolean> {
 
 const REQUIRED_STORES: StoreNames<ExpenseDB>[] = [
   'expenses', 'balance', 'sheetConfig', 'savings', 'investments', 'dbConfig', 'budgets', 'aiConfig', 'accounts',
+  'savingsMovements',
 ];
 
 // Versión con la que se abre la BD. Parte de DB_VERSION, pero queda por encima
@@ -315,6 +347,7 @@ function setupAllStores(db: IDBPDatabase<ExpenseDB>) {
   setupBudgetsStore(db);
   setupAIConfigStore(db);
   setupAccountsStore(db);
+  setupSavingsMovementsStore(db);
 }
 
 function getMissingStores(db: IDBPDatabase<ExpenseDB>) {
