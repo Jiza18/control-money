@@ -16,6 +16,7 @@ const CATEGORIES = [
   'Transporte',
   'Entretenimiento',
   'Salud',
+  'Ahorro',
   'Otros',
 ];
 

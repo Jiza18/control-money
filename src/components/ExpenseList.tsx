@@ -48,6 +48,8 @@ import DirectionsCarOutlinedIcon from '@mui/icons-material/DirectionsCarOutlined
 import MovieOutlinedIcon from '@mui/icons-material/MovieOutlined';
 import FavoriteBorderRoundedIcon from '@mui/icons-material/FavoriteBorderRounded';
 import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined';
+import SavingsOutlinedIcon from '@mui/icons-material/SavingsOutlined';
+import { toggleSavingsExpensePayment } from '../db/savingsMovementsService';
 import { format, isSameMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Expense, PaymentRecord } from '../db/config';
@@ -86,6 +88,7 @@ const categoryIcons: Record<string, ReactNode> = {
   'Transporte': <DirectionsCarOutlinedIcon />,
   'Entretenimiento': <MovieOutlinedIcon />,
   'Salud': <FavoriteBorderRoundedIcon />,
+  'Ahorro': <SavingsOutlinedIcon />,
   'Otros': <CategoryOutlinedIcon />,
 };
 
@@ -338,6 +341,26 @@ export default function ExpenseList({
 
   const handlePaymentToggle = async (expense: Expense) => {
     if (!expense.id) return;
+    // Aporte mensual de una meta: pagarlo aporta a la meta (y descuenta del saldo); desmarcarlo lo deshace
+    if (expense.savingsGoalId) {
+      try {
+        const result = await toggleSavingsExpensePayment(expense, currentMonth);
+        if (result) {
+          toast.success(
+            result.paid
+              ? `Aportados ${formatCurrency(result.amount)} a «${result.goal.name}»`
+              : `Aportación a «${result.goal.name}» deshecha`
+          );
+          await Promise.all([loadExpenses(), loadBalance()]);
+          return;
+        }
+      } catch (error) {
+        console.error('Error updating savings contribution:', error);
+        toast.error('No se pudo registrar la aportación');
+        await loadExpenses();
+        return;
+      }
+    }
     try {
       const existingPaymentForMonth = expense.paymentHistory?.find((record) =>
         isSameMonth(new Date(record.date), currentMonth)

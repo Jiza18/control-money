@@ -37,8 +37,8 @@ class TursoExpenseRepository implements ExpenseRepository {
 
   async create(expense: Omit<Expense, 'id'>): Promise<Expense> {
     const result = await this.client.execute({
-      sql: `INSERT INTO expenses (amount, category, description, date, frequency, next_payment_date, is_paid, payment_history, duration, account_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
+      sql: `INSERT INTO expenses (amount, category, description, date, frequency, next_payment_date, is_paid, payment_history, duration, account_id, savings_goal_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
       args: [
         expense.amount,
         expense.category,
@@ -49,7 +49,8 @@ class TursoExpenseRepository implements ExpenseRepository {
         booleanToNumber(expense.isPaid),
         expense.paymentHistory ? JSON.stringify(expense.paymentHistory) : null,
         expense.duration || null,
-        expense.accountId ?? null
+        expense.accountId ?? null,
+        expense.savingsGoalId ?? null
       ]
     });
 
@@ -59,7 +60,8 @@ class TursoExpenseRepository implements ExpenseRepository {
   async update(expense: Expense): Promise<Expense> {
     await this.client.execute({
       sql: `UPDATE expenses SET amount = ?, category = ?, description = ?, date = ?, frequency = ?,
-            next_payment_date = ?, is_paid = ?, payment_history = ?, duration = ?, account_id = ?, updated_at = CURRENT_TIMESTAMP
+            next_payment_date = ?, is_paid = ?, payment_history = ?, duration = ?, account_id = ?, savings_goal_id = ?,
+            updated_at = CURRENT_TIMESTAMP
             WHERE id = ?`,
       args: [
         expense.amount,
@@ -72,6 +74,7 @@ class TursoExpenseRepository implements ExpenseRepository {
         expense.paymentHistory ? JSON.stringify(expense.paymentHistory) : null,
         expense.duration || null,
         expense.accountId ?? null,
+        expense.savingsGoalId ?? null,
         expense.id!
       ]
     });
@@ -226,7 +229,8 @@ class TursoExpenseRepository implements ExpenseRepository {
       isPaid: numberToBoolean(row.is_paid as number),
       paymentHistory: row.payment_history ? JSON.parse(row.payment_history as string) as PaymentRecord[] : undefined,
       duration: row.duration as number || undefined,
-      accountId: row.account_id != null ? (row.account_id as number) : undefined
+      accountId: row.account_id != null ? (row.account_id as number) : undefined,
+      savingsGoalId: row.savings_goal_id != null ? (row.savings_goal_id as number) : undefined
     };
   }
 }
@@ -341,8 +345,8 @@ class TursoSavingsRepository implements SavingsRepository {
   async create(goal: Omit<SavingsGoal, 'id'>): Promise<SavingsGoal> {
     const result = await this.client.execute({
       sql: `INSERT INTO savings_goals (name, description, target_amount, current_amount, monthly_contribution, start_date, target_date, completed,
-            interest_rate, interest_frequency, interest_tax_rate) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
+            interest_rate, interest_frequency, interest_tax_rate, add_to_expenses) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
       args: [
         goal.name,
         goal.description,
@@ -354,7 +358,8 @@ class TursoSavingsRepository implements SavingsRepository {
         booleanToNumber(goal.completed),
         goal.interestRate ?? null,
         goal.interestFrequency ?? null,
-        goal.interestTaxRate ?? null
+        goal.interestTaxRate ?? null,
+        booleanToNumber(Boolean(goal.addToExpenses))
       ]
     });
 
@@ -365,7 +370,7 @@ class TursoSavingsRepository implements SavingsRepository {
     await this.client.execute({
       sql: `UPDATE savings_goals SET name = ?, description = ?, target_amount = ?, current_amount = ?, 
             monthly_contribution = ?, start_date = ?, target_date = ?, completed = ?,
-            interest_rate = ?, interest_frequency = ?, interest_tax_rate = ?, updated_at = CURRENT_TIMESTAMP 
+            interest_rate = ?, interest_frequency = ?, interest_tax_rate = ?, add_to_expenses = ?, updated_at = CURRENT_TIMESTAMP 
             WHERE id = ?`,
       args: [
         goal.name,
@@ -379,6 +384,7 @@ class TursoSavingsRepository implements SavingsRepository {
         goal.interestRate ?? null,
         goal.interestFrequency ?? null,
         goal.interestTaxRate ?? null,
+        booleanToNumber(Boolean(goal.addToExpenses)),
         goal.id!
       ]
     });
@@ -449,7 +455,8 @@ function mapRowToSavingsGoal(row: any): SavingsGoal {
     completed: numberToBoolean(row.completed as number),
     interestRate: row.interest_rate != null ? (row.interest_rate as number) : undefined,
     interestFrequency: row.interest_frequency ? (row.interest_frequency as SavingsGoal['interestFrequency']) : undefined,
-    interestTaxRate: row.interest_tax_rate != null ? (row.interest_tax_rate as number) : undefined
+    interestTaxRate: row.interest_tax_rate != null ? (row.interest_tax_rate as number) : undefined,
+    addToExpenses: row.add_to_expenses != null ? numberToBoolean(row.add_to_expenses as number) : undefined
   };
 }
 
@@ -461,7 +468,8 @@ function mapRowToSavingsMovement(row: any): SavingsMovement {
     amount: row.amount as number,
     date: stringToDate(row.date as string),
     note: row.note ? (row.note as string) : undefined,
-    affectsBalance: numberToBoolean(row.affects_balance as number)
+    affectsBalance: numberToBoolean(row.affects_balance as number),
+    expenseId: row.expense_id != null ? (row.expense_id as number) : undefined
   };
 }
 
@@ -474,15 +482,16 @@ class TursoSavingsMovementRepository implements SavingsMovementRepository {
 
   async create(movement: Omit<SavingsMovement, 'id'>): Promise<SavingsMovement> {
     const result = await this.client.execute({
-      sql: `INSERT INTO savings_movements (goal_id, type, amount, date, note, affects_balance)
-            VALUES (?, ?, ?, ?, ?, ?) RETURNING *`,
+      sql: `INSERT INTO savings_movements (goal_id, type, amount, date, note, affects_balance, expense_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING *`,
       args: [
         movement.goalId,
         movement.type,
         movement.amount,
         dateToString(movement.date),
         movement.note || null,
-        booleanToNumber(movement.affectsBalance)
+        booleanToNumber(movement.affectsBalance),
+        movement.expenseId ?? null
       ]
     });
 
@@ -491,7 +500,7 @@ class TursoSavingsMovementRepository implements SavingsMovementRepository {
 
   async update(movement: SavingsMovement): Promise<SavingsMovement> {
     await this.client.execute({
-      sql: `UPDATE savings_movements SET goal_id = ?, type = ?, amount = ?, date = ?, note = ?, affects_balance = ?
+      sql: `UPDATE savings_movements SET goal_id = ?, type = ?, amount = ?, date = ?, note = ?, affects_balance = ?, expense_id = ?
             WHERE id = ?`,
       args: [
         movement.goalId,
@@ -500,6 +509,7 @@ class TursoSavingsMovementRepository implements SavingsMovementRepository {
         dateToString(movement.date),
         movement.note || null,
         booleanToNumber(movement.affectsBalance),
+        movement.expenseId ?? null,
         movement.id!
       ]
     });
@@ -870,7 +880,8 @@ class TursoDatabaseOperations implements DatabaseOperations {
       isPaid: numberToBoolean(row.is_paid as number),
       paymentHistory: row.payment_history ? JSON.parse(row.payment_history as string) : undefined,
       duration: row.duration || undefined,
-      accountId: row.account_id != null ? row.account_id : undefined
+      accountId: row.account_id != null ? row.account_id : undefined,
+      savingsGoalId: row.savings_goal_id != null ? row.savings_goal_id : undefined
     }));
 
     // Exportar balance
@@ -943,9 +954,10 @@ class TursoDatabaseOperations implements DatabaseOperations {
     if (data.expenses) {
       for (const expense of data.expenses) {
         await this.client.execute({
-          sql: `INSERT INTO expenses (amount, category, description, date, frequency, next_payment_date, is_paid, payment_history, duration, account_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          sql: `INSERT INTO expenses (id, amount, category, description, date, frequency, next_payment_date, is_paid, payment_history, duration, account_id, savings_goal_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           args: [
+            expense.id ?? null,
             expense.amount,
             expense.category,
             expense.description,
@@ -955,7 +967,8 @@ class TursoDatabaseOperations implements DatabaseOperations {
             booleanToNumber(expense.isPaid),
             expense.paymentHistory ? JSON.stringify(expense.paymentHistory) : null,
             expense.duration || null,
-            expense.accountId ?? null
+            expense.accountId ?? null,
+            expense.savingsGoalId ?? null
           ]
         });
       }
@@ -983,8 +996,8 @@ class TursoDatabaseOperations implements DatabaseOperations {
       for (const saving of data.savings) {
         await this.client.execute({
           sql: `INSERT INTO savings_goals (id, name, description, target_amount, current_amount, monthly_contribution, start_date, target_date, completed,
-                interest_rate, interest_frequency, interest_tax_rate) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                interest_rate, interest_frequency, interest_tax_rate, add_to_expenses) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           args: [
             saving.id ?? null,
             saving.name,
@@ -997,7 +1010,8 @@ class TursoDatabaseOperations implements DatabaseOperations {
             booleanToNumber(saving.completed),
             saving.interestRate ?? null,
             saving.interestFrequency ?? null,
-            saving.interestTaxRate ?? null
+            saving.interestTaxRate ?? null,
+            booleanToNumber(Boolean(saving.addToExpenses))
           ]
         });
       }
@@ -1007,15 +1021,16 @@ class TursoDatabaseOperations implements DatabaseOperations {
     if (data.savingsMovements) {
       for (const movement of data.savingsMovements) {
         await this.client.execute({
-          sql: `INSERT INTO savings_movements (goal_id, type, amount, date, note, affects_balance)
-                VALUES (?, ?, ?, ?, ?, ?)`,
+          sql: `INSERT INTO savings_movements (goal_id, type, amount, date, note, affects_balance, expense_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?)`,
           args: [
             movement.goalId,
             movement.type,
             movement.amount,
             dateToString(movement.date),
             movement.note || null,
-            booleanToNumber(Boolean(movement.affectsBalance))
+            booleanToNumber(Boolean(movement.affectsBalance)),
+            movement.expenseId ?? null
           ]
         });
       }

@@ -31,12 +31,14 @@ import PercentRoundedIcon from '@mui/icons-material/PercentRounded';
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
 import HistoryRoundedIcon from '@mui/icons-material/HistoryRounded';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
-import { SavingsGoal, SavingsMovement } from '../db/config';
+import { Expense, SavingsGoal, SavingsMovement } from '../db/config';
 import { getCurrentBalance } from '../db';
 import {
   addSavingsMovement,
   deleteSavingsMovement,
+  findGoalExpense,
   getSavingsMovements,
+  isExpenseMonthPending,
 } from '../db/savingsMovementsService';
 import { hasInterest } from '../db/savingsInterest';
 import { formatCurrency } from '../utils/formatters';
@@ -138,6 +140,8 @@ export function SavingsMovementDialog({
   const [affectsBalance, setAffectsBalance] = useState(true);
   const [balance, setBalance] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+  const [goalExpense, setGoalExpense] = useState<Expense | null>(null);
+  const [markExpensePaid, setMarkExpensePaid] = useState(true);
 
   useEffect(() => {
     if (!open) return;
@@ -146,10 +150,17 @@ export function SavingsMovementDialog({
     setDate(initialDate ?? new Date());
     setNote('');
     setAffectsBalance(true);
+    setMarkExpensePaid(true);
+    setGoalExpense(null);
+    if (goal?.id && goal.addToExpenses) {
+      findGoalExpense(goal.id)
+        .then((e) => setGoalExpense(e ?? null))
+        .catch(() => setGoalExpense(null));
+    }
     getCurrentBalance()
       .then((b) => setBalance(b ? b.amount : 0))
       .catch(() => setBalance(null));
-  }, [open, initialType, initialAmount, initialDate]);
+  }, [open, initialType, initialAmount, initialDate, goal?.id, goal?.addToExpenses]);
 
   if (!goal) return null;
 
@@ -159,6 +170,9 @@ export function SavingsMovementDialog({
   const signed = !valid ? 0 : type === 'withdrawal' ? -value : value;
   const touchesBalance = type !== 'interest' && affectsBalance;
   const showInterest = hasInterest(goal) || type === 'interest';
+  // Si la meta tiene su aporte en Gastos y ese mes está pendiente, la aportación lo marca como pagado
+  const canMarkExpense = type === 'deposit' && goalExpense !== null && isExpenseMonthPending(goalExpense, date);
+  const monthName = format(date, 'MMMM', { locale: es });
 
   const handleSave = async () => {
     if (!valid || tooMuch) return;
@@ -170,6 +184,7 @@ export function SavingsMovementDialog({
         date,
         note: note.trim() || undefined,
         affectsBalance: touchesBalance,
+        expenseId: canMarkExpense && markExpensePaid ? goalExpense!.id : undefined,
       });
       toast.success(savedMessages[type]);
       onSaved(updated);
@@ -284,6 +299,18 @@ export function SavingsMovementDialog({
                 </Typography>
               }
               sx={{ mx: 0, px: 1, py: 0.25, borderRadius: '10px', border: `1px solid ${t.border}` }}
+            />
+          )}
+
+          {canMarkExpense && (
+            <FormControlLabel
+              control={<Checkbox checked={markExpensePaid} onChange={(e) => setMarkExpensePaid(e.target.checked)} />}
+              label={
+                <Typography variant="body2" sx={{ color: t.textPrimary }}>
+                  Marcar como pagado el aporte de {monthName} en Gastos
+                </Typography>
+              }
+              sx={{ mx: 0, mt: -1, px: 1, py: 0.25, borderRadius: '10px', border: `1px solid ${t.border}` }}
             />
           )}
 

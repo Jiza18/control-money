@@ -180,6 +180,9 @@ export async function initializeTursoDatabase(client: Client): Promise<void> {
       'ALTER TABLE savings_goals ADD COLUMN interest_rate REAL',
       'ALTER TABLE savings_goals ADD COLUMN interest_frequency TEXT',
       'ALTER TABLE savings_goals ADD COLUMN interest_tax_rate REAL',
+      'ALTER TABLE expenses ADD COLUMN savings_goal_id INTEGER',
+      'ALTER TABLE savings_goals ADD COLUMN add_to_expenses BOOLEAN',
+      'ALTER TABLE savings_movements ADD COLUMN expense_id INTEGER',
     ];
     for (const migration of columnMigrations) {
       try {

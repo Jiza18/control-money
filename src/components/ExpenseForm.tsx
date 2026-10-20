@@ -36,6 +36,7 @@ const categories = [
   'Transporte',
   'Entretenimiento',
   'Salud',
+  'Ahorro',
   'Otros',
 ];
 

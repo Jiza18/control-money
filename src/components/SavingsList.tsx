@@ -48,7 +48,8 @@ import {
   monthsToTarget,
   requiredMonthlyContribution,
 } from '../db/savingsInterest';
-import { getMovementsByGoal } from '../db/savingsMovementsService';
+import { endExpenseForGoal, getMovementsByGoal, syncGoalExpense } from '../db/savingsMovementsService';
+import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 import { SavingsHistoryDialog, SavingsMovementDialog } from './SavingsMovements';
 import {
   getSavingsGoals as getAllSavingsGoals,
@@ -175,6 +176,7 @@ export default function SavingsList() {
         interestRate: goal.interestRate,
         interestFrequency: goal.interestFrequency ?? 'annual',
         interestTaxRate: goal.interestTaxRate,
+        addToExpenses: goal.addToExpenses ?? false,
       });
     } else {
       setSelectedGoal(null);
@@ -189,6 +191,7 @@ export default function SavingsList() {
         calculateByDate: false,
         withInterest: false,
         interestFrequency: 'annual',
+        addToExpenses: false,
       });
     }
     setOpenDialog(true);
@@ -234,13 +237,16 @@ export default function SavingsList() {
       }
       goalData.completed = goalData.targetAmount > 0 && goalData.currentAmount >= goalData.targetAmount;
 
-      if (selectedGoal?.id) {
-        await updateSavingsGoal({ ...goalData, id: selectedGoal.id });
-        toast.success('Meta guardada');
-      } else {
-        await addSavingsGoal(goalData);
-        toast.success('Meta guardada');
-      }
+      const saved = selectedGoal?.id
+        ? await updateSavingsGoal({ ...goalData, id: selectedGoal.id })
+        : await addSavingsGoal(goalData);
+      // Crea, actualiza o quita el gasto fijo del aporte mensual en Gastos
+      await syncGoalExpense(saved);
+      toast.success(
+        goalData.addToExpenses && goalData.monthlyContribution > 0 && !goalData.completed
+          ? 'Meta guardada · aporte mensual añadido a Gastos'
+          : 'Meta guardada'
+      );
       await loadGoals();
       handleCloseDialog();
     } catch (error) {
@@ -266,6 +272,7 @@ export default function SavingsList() {
   const handleDeleteConfirmed = async () => {
     if (confirmState.id !== null) {
       try {
+        await endExpenseForGoal(confirmState.id);
         await deleteSavingsGoal(confirmState.id);
         await loadGoals();
         toast.success('Meta eliminada');
@@ -383,6 +390,16 @@ export default function SavingsList() {
           </Box>
           <StatusChip status={goal.completed ? 'completed' : 'in_progress'} />
         </Box>
+
+        {goal.addToExpenses && goal.monthlyContribution > 0 && !goal.completed && (
+          <Typography
+            variant="caption"
+            sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: t.textSecondary, mt: -1 }}
+          >
+            <ReceiptLongOutlinedIcon sx={{ fontSize: '0.95rem', color: t.textMuted }} />
+            En Gastos cada mes como aporte fijo
+          </Typography>
+        )}
 
         {hasInterest(goal) && (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: -1, flexWrap: 'wrap' }}>
@@ -823,6 +840,26 @@ export default function SavingsList() {
                   backgroundColor: formData.calculateByDate ? t.primarySoft : 'transparent',
                 }}
               />
+              <Box>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={formData.addToExpenses || false}
+                      onChange={(e) => setFormData({ ...formData, addToExpenses: e.target.checked })}
+                    />
+                  }
+                  label={
+                    <Typography variant="body2" sx={{ color: t.textPrimary, fontWeight: 500 }}>
+                      Añadir el aporte mensual a Gastos
+                    </Typography>
+                  }
+                  sx={{ mx: 0, gap: 0.5 }}
+                />
+                <Typography variant="caption" sx={{ display: 'block', color: t.textMuted, ml: 7, mt: -0.5 }}>
+                  Aparece cada mes como gasto fijo de la categoría Ahorro. Al marcarlo como pagado se aporta a
+                  esta meta y se descuenta de tu saldo actual.
+                </Typography>
+              </Box>
             </FormSection>
 
             <FormSection

@@ -67,6 +67,7 @@ export const categoryColors: Record<string, { light: string; dark: string }> = {
   'Transporte':      { light: '#0369A1', dark: '#38BDF8' },
   'Entretenimiento': { light: '#7E22CE', dark: '#C084FC' },
   'Salud':           { light: '#0F766E', dark: '#2DD4BF' },
+  'Ahorro':          { light: '#4D7C0F', dark: '#A3E635' },
   'Otros':           { light: '#64748B', dark: '#94A3B8' },
 };
 

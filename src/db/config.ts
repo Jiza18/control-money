@@ -18,6 +18,7 @@ export interface Expense {
   paymentHistory?: PaymentRecord[];
   duration?: number; // Duración en meses para gastos recurrentes
   accountId?: number; // Cuenta con la que se paga el gasto (opcional)
+  savingsGoalId?: number; // Aporte mensual de una meta de ahorro: marcarlo pagado aporta a la meta
 }
 
 export interface Account {
@@ -50,6 +51,7 @@ export interface SavingsGoal {
   interestRate?: number; // Tipo de interés anual en porcentaje (TIN)
   interestFrequency?: InterestFrequency; // Cada cuánto capitaliza el banco los intereses
   interestTaxRate?: number; // Retención sobre los intereses en porcentaje (0 si no hay)
+  addToExpenses?: boolean; // Mostrar el aporte mensual como gasto fijo (categoría Ahorro) en Gastos
 }
 
 export type InterestFrequency = 'annual' | 'semi-annual' | 'quarterly' | 'monthly';
@@ -63,6 +65,7 @@ export interface SavingsMovement {
   date: Date;
   note?: string;
   affectsBalance: boolean; // Si se descontó (aportación) o sumó (retirada) al saldo actual
+  expenseId?: number; // Gasto de aporte mensual que pagó esta aportación (ver Expense.savingsGoalId)
 }
 
 export interface Investment {
