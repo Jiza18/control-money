@@ -114,6 +114,15 @@ CREATE TABLE IF NOT EXISTS savings_movements (
 
 CREATE INDEX IF NOT EXISTS idx_savings_movements_goal ON savings_movements(goal_id);
 
+-- Plan de meses futuros: nómina prevista y reparto por cuenta (distribution es JSON)
+CREATE TABLE IF NOT EXISTS month_plans (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  month TEXT NOT NULL UNIQUE,
+  income REAL,
+  distribution TEXT NOT NULL DEFAULT '[]',
+  updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Tabla de configuración de Google Sheets
 CREATE TABLE IF NOT EXISTS google_sheets_config (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -198,7 +207,7 @@ export async function initializeTursoDatabase(client: Client): Promise<void> {
     }
 
     // Inicializar metadatos de sincronización
-    const tables = ['expenses', 'balance', 'savings_goals', 'savings_movements', 'investments', 'accounts', 'google_sheets_config'];
+    const tables = ['expenses', 'balance', 'savings_goals', 'savings_movements', 'month_plans', 'investments', 'accounts', 'google_sheets_config'];
     
     for (const table of tables) {
       await client.execute({

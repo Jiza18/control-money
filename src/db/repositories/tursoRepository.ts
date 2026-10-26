@@ -8,6 +8,7 @@ import {
   GoogleSheetsRepository,
   AccountRepository,
   SavingsMovementRepository,
+  MonthPlanRepository,
   DatabaseOperations 
 } from './interfaces';
 import { 
@@ -18,7 +19,8 @@ import {
   GoogleSheetsConfig,
   PaymentRecord,
   Account,
-  SavingsMovement
+  SavingsMovement,
+  MonthPlan
 } from '../config';
 import { 
   dateToString, 
@@ -474,6 +476,70 @@ function mapRowToSavingsMovement(row: any): SavingsMovement {
   };
 }
 
+function mapRowToMonthPlan(row: any): MonthPlan {
+  let distribution: MonthPlan['distribution'] = [];
+  try {
+    distribution = JSON.parse((row.distribution as string) || '[]');
+  } catch {
+    distribution = [];
+  }
+  return {
+    id: row.id as number,
+    month: row.month as string,
+    income: row.income != null ? (row.income as number) : undefined,
+    distribution,
+    updatedAt: row.updated_at ? stringToDate(row.updated_at as string) : new Date()
+  };
+}
+
+class TursoMonthPlanRepository implements MonthPlanRepository {
+  private client: Client;
+
+  constructor(client: Client) {
+    this.client = client;
+  }
+
+  async create(plan: Omit<MonthPlan, 'id'>): Promise<MonthPlan> {
+    const result = await this.client.execute({
+      sql: 'INSERT INTO month_plans (month, income, distribution, updated_at) VALUES (?, ?, ?, ?) RETURNING *',
+      args: [plan.month, plan.income ?? null, JSON.stringify(plan.distribution ?? []), dateToString(plan.updatedAt)]
+    });
+    return mapRowToMonthPlan(result.rows[0]);
+  }
+
+  async update(plan: MonthPlan): Promise<MonthPlan> {
+    await this.client.execute({
+      sql: 'UPDATE month_plans SET month = ?, income = ?, distribution = ?, updated_at = ? WHERE id = ?',
+      args: [plan.month, plan.income ?? null, JSON.stringify(plan.distribution ?? []), dateToString(plan.updatedAt), plan.id!]
+    });
+    return plan;
+  }
+
+  async delete(id: number): Promise<boolean> {
+    try {
+      await this.client.execute({ sql: 'DELETE FROM month_plans WHERE id = ?', args: [id] });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async findById(id: number): Promise<MonthPlan | undefined> {
+    const result = await this.client.execute({ sql: 'SELECT * FROM month_plans WHERE id = ?', args: [id] });
+    return result.rows[0] ? mapRowToMonthPlan(result.rows[0]) : undefined;
+  }
+
+  async findAll(): Promise<MonthPlan[]> {
+    const result = await this.client.execute('SELECT * FROM month_plans ORDER BY month');
+    return result.rows.map(row => mapRowToMonthPlan(row));
+  }
+
+  async findByMonth(month: string): Promise<MonthPlan | undefined> {
+    const result = await this.client.execute({ sql: 'SELECT * FROM month_plans WHERE month = ?', args: [month] });
+    return result.rows[0] ? mapRowToMonthPlan(result.rows[0]) : undefined;
+  }
+}
+
 class TursoSavingsMovementRepository implements SavingsMovementRepository {
   private client: Client;
 
@@ -907,6 +973,10 @@ class TursoDatabaseOperations implements DatabaseOperations {
     const movementsResult = await this.client.execute('SELECT * FROM savings_movements');
     data.savingsMovements = movementsResult.rows.map(row => mapRowToSavingsMovement(row));
 
+    // Exportar planes de meses futuros
+    const plansResult = await this.client.execute('SELECT * FROM month_plans');
+    data.monthPlans = plansResult.rows.map(row => mapRowToMonthPlan(row));
+
     // Exportar investments
     const investmentsResult = await this.client.execute('SELECT * FROM investments');
     data.investments = investmentsResult.rows.map(row => ({
@@ -1081,6 +1151,21 @@ class TursoDatabaseOperations implements DatabaseOperations {
       }
     }
 
+    // Importar planes de meses futuros
+    if (data.monthPlans) {
+      for (const plan of data.monthPlans) {
+        await this.client.execute({
+          sql: 'INSERT INTO month_plans (month, income, distribution, updated_at) VALUES (?, ?, ?, ?)',
+          args: [
+            plan.month,
+            plan.income ?? null,
+            JSON.stringify(Array.isArray(plan.distribution) ? plan.distribution : []),
+            dateToString(plan.updatedAt ?? new Date())
+          ]
+        });
+      }
+    }
+
     // Importar Google Sheets config
     if (data.sheetConfig) {
       for (const config of data.sheetConfig) {
@@ -1107,6 +1192,7 @@ class TursoDatabaseOperations implements DatabaseOperations {
     await this.client.execute('DELETE FROM balance');
     await this.client.execute('DELETE FROM savings_goals');
     await this.client.execute('DELETE FROM savings_movements');
+    await this.client.execute('DELETE FROM month_plans');
     await this.client.execute('DELETE FROM investments');
     await this.client.execute('DELETE FROM accounts');
     await this.client.execute('DELETE FROM google_sheets_config');
@@ -1140,6 +1226,7 @@ export class TursoRepository implements DatabaseRepository {
   public investments: InvestmentRepository;
   public accounts: AccountRepository;
   public savingsMovements: SavingsMovementRepository;
+  public monthPlans: MonthPlanRepository;
   public googleSheets: GoogleSheetsRepository;
   public operations: DatabaseOperations;
 
@@ -1150,6 +1237,7 @@ export class TursoRepository implements DatabaseRepository {
     this.investments = new TursoInvestmentRepository(client);
     this.accounts = new TursoAccountRepository(client);
     this.savingsMovements = new TursoSavingsMovementRepository(client);
+    this.monthPlans = new TursoMonthPlanRepository(client);
     this.googleSheets = new TursoGoogleSheetsRepository(client);
     this.operations = new TursoDatabaseOperations(client);
   }

@@ -35,6 +35,10 @@ export async function exportDatabase() {
     data.savingsMovements = await db.getAll('savingsMovements');
   }
 
+  if (db.objectStoreNames.contains('monthPlans')) {
+    data.monthPlans = await db.getAll('monthPlans');
+  }
+
   return data;
 }
 
@@ -174,6 +178,23 @@ export async function importDatabase(data: Record<string, any[]>) {
         affectsBalance: Boolean(movement?.affectsBalance)
       };
       await store.add(normalized);
+    }
+
+    await tx.done;
+  }
+
+  if (data.monthPlans && db.objectStoreNames.contains('monthPlans')) {
+    const tx = db.transaction('monthPlans', 'readwrite');
+    const store = tx.objectStore('monthPlans');
+
+    await store.clear();
+
+    for (const plan of data.monthPlans) {
+      await store.add({
+        ...plan,
+        distribution: Array.isArray(plan?.distribution) ? plan.distribution : [],
+        updatedAt: plan?.updatedAt instanceof Date ? plan.updatedAt : new Date(plan?.updatedAt ?? Date.now()),
+      });
     }
 
     await tx.done;

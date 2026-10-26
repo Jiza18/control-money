@@ -50,6 +50,8 @@ import FavoriteBorderRoundedIcon from '@mui/icons-material/FavoriteBorderRounded
 import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined';
 import SavingsOutlinedIcon from '@mui/icons-material/SavingsOutlined';
 import { toggleSavingsExpensePayment } from '../db/savingsMovementsService';
+import { isFutureMonth } from '../db/monthProjection';
+import MonthForecast from './MonthForecast';
 import {
   ACCOUNTS_CHANGED_EVENT,
   BALANCE_CHANGED_EVENT,
@@ -565,6 +567,11 @@ export default function ExpenseList({
   const pendingCount = expenses.length - paidCount;
   const paidPct = totalMonth > 0 ? Math.round((paidMonth / totalMonth) * 100) : 0;
   const isCurrentMonthView = isSameMonth(currentMonth, new Date());
+  // Meses futuros: previsión encadenada en lugar del resumen del mes en curso
+  const isForecastView = isFutureMonth(currentMonth);
+  const forecastKey = expenses
+    .map((e) => `${e.id}:${e.amount}:${e.isPaid}:${e.accountId ?? ''}`)
+    .join('|');
 
   const budgetRows = categories
     .map((category) => {
@@ -583,7 +590,8 @@ export default function ExpenseList({
     })
     .filter((row) => row.limit > 0);
 
-  const showAccounts = accounts.length > 0 && accountBuckets.length > 0;
+  // En meses futuros la previsión por cuenta ya sale en MonthForecast
+  const showAccounts = accounts.length > 0 && accountBuckets.length > 0 && !isFutureMonth(currentMonth);
   const showBudgets = budgetRows.length > 0;
   const hasFilters = selectedCategory !== null || selectedAccount !== null || searchText !== '';
 
@@ -697,6 +705,9 @@ export default function ExpenseList({
   return (
     <Box data-testid="expense-list" sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 2, md: 2.5 } }}>
       {/* Summary cards */}
+      {isForecastView ? (
+        <MonthForecast month={currentMonth} refreshKey={forecastKey} />
+      ) : (
       <Box
         sx={{
           display: 'grid',
@@ -752,6 +763,7 @@ export default function ExpenseList({
           helperText={`${pendingCount} por pagar`}
         />
       </Box>
+      )}
 
       {/* Por cuenta + presupuestos */}
       {(showAccounts || showBudgets) && (

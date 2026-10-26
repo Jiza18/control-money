@@ -7,6 +7,7 @@ import {
   GoogleSheetsRepository,
   AccountRepository,
   SavingsMovementRepository,
+  MonthPlanRepository,
   DatabaseOperations 
 } from './interfaces';
 import { 
@@ -17,6 +18,7 @@ import {
   GoogleSheetsConfig, 
   Account,
   SavingsMovement,
+  MonthPlan,
   getDB 
 } from '../config';
 import { 
@@ -382,6 +384,45 @@ class IndexedDbSavingsMovementRepository implements SavingsMovementRepository {
   }
 }
 
+class IndexedDbMonthPlanRepository implements MonthPlanRepository {
+  async create(plan: Omit<MonthPlan, 'id'>): Promise<MonthPlan> {
+    const db = await getDB();
+    const id = await db.add('monthPlans', plan as MonthPlan);
+    return { ...plan, id } as MonthPlan;
+  }
+
+  async update(plan: MonthPlan): Promise<MonthPlan> {
+    const db = await getDB();
+    await db.put('monthPlans', plan);
+    return plan;
+  }
+
+  async delete(id: number): Promise<boolean> {
+    try {
+      const db = await getDB();
+      await db.delete('monthPlans', id);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async findById(id: number): Promise<MonthPlan | undefined> {
+    const db = await getDB();
+    return await db.get('monthPlans', id);
+  }
+
+  async findAll(): Promise<MonthPlan[]> {
+    const db = await getDB();
+    return (await db.getAll('monthPlans')).sort((a, b) => a.month.localeCompare(b.month));
+  }
+
+  async findByMonth(month: string): Promise<MonthPlan | undefined> {
+    const db = await getDB();
+    return await db.getFromIndex('monthPlans', 'month', month);
+  }
+}
+
 class IndexedDbDatabaseOperations implements DatabaseOperations {
   async exportData(): Promise<Record<string, any[]>> {
     return await exportDatabase();
@@ -398,6 +439,7 @@ class IndexedDbDatabaseOperations implements DatabaseOperations {
     await clearStore('investments');
     await clearStore('accounts');
     await clearStore('savingsMovements');
+    await clearStore('monthPlans');
     await clearStore('sheetConfig');
   }
 
@@ -429,6 +471,7 @@ export class IndexedDbRepository implements DatabaseRepository {
   public investments: InvestmentRepository;
   public accounts: AccountRepository;
   public savingsMovements: SavingsMovementRepository;
+  public monthPlans: MonthPlanRepository;
   public googleSheets: GoogleSheetsRepository;
   public operations: DatabaseOperations;
 
@@ -439,6 +482,7 @@ export class IndexedDbRepository implements DatabaseRepository {
     this.investments = new IndexedDbInvestmentRepository();
     this.accounts = new IndexedDbAccountRepository();
     this.savingsMovements = new IndexedDbSavingsMovementRepository();
+    this.monthPlans = new IndexedDbMonthPlanRepository();
     this.googleSheets = new IndexedDbGoogleSheetsRepository();
     this.operations = new IndexedDbDatabaseOperations();
   }

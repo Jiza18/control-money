@@ -90,6 +90,15 @@ export interface Investment {
   notes?: string;
 }
 
+// Plan de un mes futuro: nómina prevista y cuánto se reparte a cada cuenta
+export interface MonthPlan {
+  id?: number;
+  month: string; // 'yyyy-MM'
+  income?: number; // Nómina del mes; sin definir se usa Balance.monthlyIncome como estimado
+  distribution: { accountId: number; amount: number }[];
+  updatedAt: Date;
+}
+
 export interface CategoryBudget {
   id?: number;
   category: string;
@@ -104,7 +113,7 @@ export interface AIConfig {
 }
 
 const DB_NAME = 'expense-tracker';
-const DB_VERSION = 81; // v81: added savingsMovements store
+const DB_VERSION = 82; // v82: added monthPlans store
 
 export interface GoogleSheetsConfig {
   id?: number;
@@ -178,6 +187,11 @@ export type ExpenseDB = {
     key: number;
     value: SavingsMovement;
     indexes: { 'goalId': number; 'date': Date };
+  };
+  monthPlans: {
+    key: number;
+    value: MonthPlan;
+    indexes: { 'month': string };
   };
 };
 
@@ -273,6 +287,14 @@ function setupSavingsMovementsStore(db: IDBPDatabase<ExpenseDB> | IDBDatabase) {
   }
 }
 
+// Store para los planes de meses futuros (nómina y reparto por cuenta)
+function setupMonthPlansStore(db: IDBPDatabase<ExpenseDB> | IDBDatabase) {
+  if (!db.objectStoreNames.contains('monthPlans')) {
+    const store = db.createObjectStore('monthPlans', { keyPath: 'id', autoIncrement: true });
+    store.createIndex('month', 'month', { unique: true });
+  }
+}
+
 // Función para manejar la migración de datos después de la actualización
 // async function handlePostUpgradeMigrations(db: IDBPDatabase<ExpenseDB>, oldVersion: number) {
 //   try {
@@ -340,7 +362,7 @@ export async function deleteDatabase(): Promise<boolean> {
 
 const REQUIRED_STORES: StoreNames<ExpenseDB>[] = [
   'expenses', 'balance', 'sheetConfig', 'savings', 'investments', 'dbConfig', 'budgets', 'aiConfig', 'accounts',
-  'savingsMovements',
+  'savingsMovements', 'monthPlans',
 ];
 
 // Versión con la que se abre la BD. Parte de DB_VERSION, pero queda por encima
@@ -358,6 +380,7 @@ function setupAllStores(db: IDBPDatabase<ExpenseDB>) {
   setupAIConfigStore(db);
   setupAccountsStore(db);
   setupSavingsMovementsStore(db);
+  setupMonthPlansStore(db);
 }
 
 function getMissingStores(db: IDBPDatabase<ExpenseDB>) {

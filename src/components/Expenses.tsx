@@ -32,6 +32,7 @@ import { es } from 'date-fns/locale';
 import ExpenseList from './ExpenseList';
 import ExpenseForm from './ExpenseForm';
 import AnnualOverview from './AnnualOverview';
+import { isFutureMonth } from '../db/monthProjection';
 import { BottomSheet, PageHeader } from './ui';
 import { tokens } from '../theme';
 import { getAIConfig } from '../db/aiConfigService';
@@ -198,7 +199,9 @@ export default function Expenses() {
           viewMode === 'monthly'
             ? isCurrentMonthView
               ? 'Tus pagos de este mes, de un vistazo'
-              : `Gastos previstos para ${monthLabel.toLowerCase()}`
+              : isFutureMonth(currentMonth)
+                ? `Planifica ${monthLabel.toLowerCase()}: nómina, reparto y lo que te quedará`
+                : `Lo que pagaste en ${monthLabel.toLowerCase()}`
             : 'Evolución de tus gastos a lo largo del año'
         }
         actions={
