@@ -1,7 +1,7 @@
 import { addMonths, format, isSameMonth, startOfMonth } from 'date-fns';
 import { Account, Expense, MonthPlan } from './config';
 import { getCurrentRepository, getExpensesByMonth } from './repositoryAdapter';
-import { hasBalance } from './accountBalances';
+import { adjustAccountBalance, applyToBalance, hasBalance } from './accountBalances';
 
 // Previsión de meses futuros encadenada: cada mes empieza con lo que le quede al anterior.
 //
@@ -185,6 +185,7 @@ export async function saveMonthPlan(
   const key = monthKey(month);
   const existing = await repo.monthPlans.findByMonth(key);
   const plan: Omit<MonthPlan, 'id'> = {
+    ...existing,
     month: key,
     income: changes.income === null ? undefined : changes.income ?? existing?.income,
     distribution: changes.distribution ?? existing?.distribution ?? [],
@@ -193,4 +194,85 @@ export async function saveMonthPlan(
   if (existing?.id) await repo.monthPlans.update({ ...plan, id: existing.id });
   else await repo.monthPlans.create(plan);
   if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(MONTH_PLAN_CHANGED_EVENT));
+}
+
+// --- «Ha llegado la nómina»: pasar el plan a los saldos reales
+
+export interface PayrollInput {
+  income: number;
+  distribution: { accountId: number; amount: number }[];
+  restAccountId?: number; // Cuenta en la que queda lo no repartido (p. ej. donde se cobra)
+}
+
+export async function getMonthPlan(month: Date) {
+  const repo = await getCurrentRepository();
+  return repo.monthPlans.findByMonth(monthKey(month));
+}
+
+async function savePlan(month: Date, changes: Partial<MonthPlan>): Promise<void> {
+  const repo = await getCurrentRepository();
+  const existing = await repo.monthPlans.findByMonth(monthKey(month));
+  const plan: Omit<MonthPlan, 'id'> = {
+    ...existing,
+    month: monthKey(month),
+    distribution: existing?.distribution ?? [],
+    ...changes,
+    updatedAt: new Date(),
+  };
+  if (existing?.id) await repo.monthPlans.update({ ...plan, id: existing.id });
+  else await repo.monthPlans.create(plan);
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(MONTH_PLAN_CHANGED_EVENT));
+}
+
+// Suma a cada cuenta lo repartido y el resto a la cuenta elegida. Sin saldos por cuenta, suma la
+// nómina al saldo actual. Guarda lo aplicado para poder deshacerlo.
+export async function applyPayroll(month: Date, input: PayrollInput): Promise<void> {
+  const repo = await getCurrentRepository();
+  const tracked = (await repo.accounts.findAll()).filter(hasBalance);
+  const trackedIds = new Set(tracked.map((a) => a.id!));
+  const income = round2(input.income);
+
+  const amounts = new Map<number, number>();
+  for (const d of input.distribution) {
+    if (d.amount > 0 && trackedIds.has(d.accountId)) amounts.set(d.accountId, (amounts.get(d.accountId) ?? 0) + d.amount);
+  }
+  const distributed = [...amounts.values()].reduce((sum, v) => sum + v, 0);
+  if (distributed > income + 0.005) throw new Error('Repartes más de lo que has cobrado');
+  const rest = round2(income - distributed);
+  if (rest > 0 && input.restAccountId != null && trackedIds.has(input.restAccountId)) {
+    amounts.set(input.restAccountId, (amounts.get(input.restAccountId) ?? 0) + rest);
+  }
+
+  const applied: { accountId: number; amount: number }[] = [];
+  let appliedToTotal: number | undefined;
+  if (tracked.length > 0) {
+    for (const [accountId, amount] of amounts) {
+      if (await adjustAccountBalance(accountId, round2(amount))) applied.push({ accountId, amount: round2(amount) });
+    }
+  } else if (income > 0) {
+    await applyToBalance(income);
+    appliedToTotal = income;
+  }
+
+  await savePlan(month, {
+    income,
+    distribution: input.distribution.filter((d) => d.amount > 0 && trackedIds.has(d.accountId)),
+    appliedAt: new Date(),
+    applied,
+    appliedToTotal,
+  });
+}
+
+// Deshace la nómina aplicada: resta de cada cuenta exactamente lo que se le sumó
+export async function undoPayroll(month: Date): Promise<void> {
+  const plan = await getMonthPlan(month);
+  if (!plan?.appliedAt) return;
+  for (const a of plan.applied ?? []) await adjustAccountBalance(a.accountId, -a.amount);
+  if (plan.appliedToTotal) await applyToBalance(-plan.appliedToTotal);
+  await savePlan(month, { appliedAt: undefined, applied: undefined, appliedToTotal: undefined });
+}
+
+// «Ya está en mis saldos»: se marca como aplicada sin tocar ningún saldo
+export async function dismissPayroll(month: Date): Promise<void> {
+  await savePlan(month, { appliedAt: new Date(), applied: [], appliedToTotal: undefined });
 }

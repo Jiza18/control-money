@@ -173,6 +173,7 @@ export async function importDatabase(data: Record<string, any[]>) {
         ...plan,
         distribution: Array.isArray(plan?.distribution) ? plan.distribution : [],
         updatedAt: plan?.updatedAt instanceof Date ? plan.updatedAt : new Date(plan?.updatedAt ?? Date.now()),
+        appliedAt: plan?.appliedAt ? new Date(plan.appliedAt) : undefined,
       });
     }
 

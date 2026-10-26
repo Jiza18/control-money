@@ -82,6 +82,11 @@ export interface MonthPlan {
   income?: number; // Nómina del mes; sin definir se usa Balance.monthlyIncome como estimado
   distribution: { accountId: number; amount: number }[];
   updatedAt: Date;
+  // Nómina aplicada a los saldos reales («Ha llegado la nómina»): lo sumado a cada cuenta,
+  // o al saldo global si no hay saldos por cuenta. Con appliedAt y sin importes = ya estaba en los saldos.
+  appliedAt?: Date;
+  applied?: { accountId: number; amount: number }[];
+  appliedToTotal?: number;
 }
 
 export interface CategoryBudget {

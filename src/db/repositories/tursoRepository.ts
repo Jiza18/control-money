@@ -486,9 +486,19 @@ function mapRowToMonthPlan(row: any): MonthPlan {
     month: row.month as string,
     income: row.income != null ? (row.income as number) : undefined,
     distribution,
-    updatedAt: row.updated_at ? stringToDate(row.updated_at as string) : new Date()
+    updatedAt: row.updated_at ? stringToDate(row.updated_at as string) : new Date(),
+    appliedAt: row.applied_at ? stringToDate(row.applied_at as string) : undefined,
+    applied: row.applied ? JSON.parse(row.applied as string) : undefined,
+    appliedToTotal: row.applied_to_total != null ? (row.applied_to_total as number) : undefined
   };
 }
+
+// Columnas de la nómina aplicada (applied_at, applied, applied_to_total)
+const appliedArgs = (plan: Omit<MonthPlan, 'id'>) => [
+  plan.appliedAt ? dateToString(plan.appliedAt) : null,
+  plan.applied ? JSON.stringify(plan.applied) : null,
+  plan.appliedToTotal ?? null
+];
 
 class TursoMonthPlanRepository implements MonthPlanRepository {
   private client: Client;
@@ -499,16 +509,18 @@ class TursoMonthPlanRepository implements MonthPlanRepository {
 
   async create(plan: Omit<MonthPlan, 'id'>): Promise<MonthPlan> {
     const result = await this.client.execute({
-      sql: 'INSERT INTO month_plans (month, income, distribution, updated_at) VALUES (?, ?, ?, ?) RETURNING *',
-      args: [plan.month, plan.income ?? null, JSON.stringify(plan.distribution ?? []), dateToString(plan.updatedAt)]
+      sql: `INSERT INTO month_plans (month, income, distribution, updated_at, applied_at, applied, applied_to_total)
+            VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING *`,
+      args: [plan.month, plan.income ?? null, JSON.stringify(plan.distribution ?? []), dateToString(plan.updatedAt), ...appliedArgs(plan)]
     });
     return mapRowToMonthPlan(result.rows[0]);
   }
 
   async update(plan: MonthPlan): Promise<MonthPlan> {
     await this.client.execute({
-      sql: 'UPDATE month_plans SET month = ?, income = ?, distribution = ?, updated_at = ? WHERE id = ?',
-      args: [plan.month, plan.income ?? null, JSON.stringify(plan.distribution ?? []), dateToString(plan.updatedAt), plan.id!]
+      sql: `UPDATE month_plans SET month = ?, income = ?, distribution = ?, updated_at = ?,
+            applied_at = ?, applied = ?, applied_to_total = ? WHERE id = ?`,
+      args: [plan.month, plan.income ?? null, JSON.stringify(plan.distribution ?? []), dateToString(plan.updatedAt), ...appliedArgs(plan), plan.id!]
     });
     return plan;
   }
@@ -983,12 +995,14 @@ class TursoDatabaseOperations implements DatabaseOperations {
     if (data.monthPlans) {
       for (const plan of data.monthPlans) {
         await this.client.execute({
-          sql: 'INSERT INTO month_plans (month, income, distribution, updated_at) VALUES (?, ?, ?, ?)',
+          sql: `INSERT INTO month_plans (month, income, distribution, updated_at, applied_at, applied, applied_to_total)
+                VALUES (?, ?, ?, ?, ?, ?, ?)`,
           args: [
             plan.month,
             plan.income ?? null,
             JSON.stringify(Array.isArray(plan.distribution) ? plan.distribution : []),
-            dateToString(plan.updatedAt ?? new Date())
+            dateToString(plan.updatedAt ?? new Date()),
+            ...appliedArgs(plan)
           ]
         });
       }

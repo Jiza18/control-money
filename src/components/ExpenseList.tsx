@@ -52,6 +52,7 @@ import SavingsOutlinedIcon from '@mui/icons-material/SavingsOutlined';
 import { toggleSavingsExpensePayment } from '../db/savingsMovementsService';
 import { isFutureMonth } from '../db/monthProjection';
 import MonthForecast from './MonthForecast';
+import PayrollCard from './PayrollCard';
 import {
   ACCOUNTS_CHANGED_EVENT,
   BALANCE_CHANGED_EVENT,
@@ -704,6 +705,9 @@ export default function ExpenseList({
 
   return (
     <Box data-testid="expense-list" sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 2, md: 2.5 } }}>
+      {/* Nómina del mes en curso: aplicar el reparto a los saldos reales */}
+      {isCurrentMonthView && <PayrollCard month={currentMonth} />}
+
       {/* Summary cards */}
       {isForecastView ? (
         <MonthForecast month={currentMonth} refreshKey={forecastKey} />

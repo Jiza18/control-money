@@ -172,6 +172,9 @@ export async function initializeTursoDatabase(client: Client): Promise<void> {
       'ALTER TABLE savings_movements ADD COLUMN expense_id INTEGER',
       'ALTER TABLE savings_movements ADD COLUMN account_id INTEGER',
       'ALTER TABLE accounts ADD COLUMN balance REAL',
+      'ALTER TABLE month_plans ADD COLUMN applied_at TEXT',
+      'ALTER TABLE month_plans ADD COLUMN applied TEXT',
+      'ALTER TABLE month_plans ADD COLUMN applied_to_total REAL',
     ];
     for (const migration of columnMigrations) {
       try {
