@@ -76,7 +76,7 @@ import {
   MoneyAmount,
 } from './ui';
 import { tokens, getCategoryColor } from '../theme';
-import { formatCurrency } from '../utils/formatters';
+import { formatAmountInput, formatCurrency, parseAmount } from '../utils/formatters';
 import { getAllBudgets } from '../db/budgetServices';
 import { getAllAccounts } from '../db/accountsService';
 import { CategoryBudget, Account } from '../db/config';
@@ -299,7 +299,7 @@ export default function ExpenseList({
     setAmountEdit({
       open: true,
       expense,
-      value: String(expense.amount),
+      value: formatAmountInput(expense.amount),
       scope: 'month',
     });
   };
@@ -344,7 +344,7 @@ export default function ExpenseList({
 
   const handleAmountSave = async (scope: 'month' | 'forward') => {
     const exp = amountEdit.expense;
-    const newAmount = parseFloat(amountEdit.value);
+    const newAmount = parseAmount(amountEdit.value) ?? NaN;
     setAmountEdit((s) => ({ ...s, open: false }));
 
     if (!exp?.id || isNaN(newAmount)) return;
@@ -1249,12 +1249,11 @@ export default function ExpenseList({
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, pt: '12px !important' }}>
           <TextField
             label="Importe"
-            type="number"
             value={amountEdit.value}
             onChange={(e) => setAmountEdit((s) => ({ ...s, value: e.target.value }))}
             autoFocus
             fullWidth
-            inputProps={{ step: '0.01', inputMode: 'decimal', style: { fontVariantNumeric: 'tabular-nums', fontWeight: 600 } }}
+            inputProps={{ inputMode: 'decimal', autoComplete: 'off', style: { fontVariantNumeric: 'tabular-nums', fontWeight: 600 } }}
             InputProps={{ endAdornment: <InputAdornment position="end">€</InputAdornment> }}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {

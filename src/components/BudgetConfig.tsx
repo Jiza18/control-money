@@ -4,7 +4,7 @@ import { useTheme } from '@mui/material/styles';
 import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
 import { CategoryChip } from './ui';
 import { tokens } from '../theme';
-import { formatCurrency } from '../utils/formatters';
+import { formatAmountInput, formatCurrency, parseAmount } from '../utils/formatters';
 import { getAllBudgets, saveBudget, deleteBudget } from '../db/budgetServices';
 import { CategoryBudget } from '../db/config';
 import { useToast } from '../contexts/ToastContext';
@@ -39,7 +39,7 @@ export default function BudgetConfig() {
       const inputMap: Record<string, string> = {};
       all.forEach((b) => {
         map[b.category] = b;
-        inputMap[b.category] = b.monthlyBudget > 0 ? String(b.monthlyBudget) : '';
+        inputMap[b.category] = b.monthlyBudget > 0 ? formatAmountInput(b.monthlyBudget) : '';
       });
       setBudgets(map);
       setInputs(inputMap);
@@ -50,7 +50,7 @@ export default function BudgetConfig() {
 
   const handleSave = async (category: string) => {
     const raw = inputs[category] || '0';
-    const amount = parseFloat(raw) || 0;
+    const amount = parseAmount(raw) || 0;
     setSaving((prev) => ({ ...prev, [category]: true }));
     try {
       if (amount === 0) {
@@ -106,15 +106,13 @@ export default function BudgetConfig() {
             </Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexShrink: 0 }}>
               <TextField
-                type="number"
                 size="small"
                 placeholder="0"
                 value={inputs[category] || ''}
                 onChange={(e) => setInputs((prev) => ({ ...prev, [category]: e.target.value }))}
                 inputProps={{
-                  min: 0,
-                  step: 1,
                   inputMode: 'decimal',
+                  autoComplete: 'off',
                   'aria-label': `Presupuesto mensual de ${category}`,
                   style: { textAlign: 'right', fontVariantNumeric: 'tabular-nums' },
                 }}

@@ -85,3 +85,13 @@ export const parseAmount = (text: string): number | undefined | null => {
   const value = Number(normalized);
   return Number.isFinite(value) ? value : null;
 };
+
+/**
+ * Importe para mostrar dentro de un campo editable: 1240 → "1240", 560.5 → "560,50"
+ */
+export const formatAmountInput = (value: number | undefined | null): string =>
+  value === undefined || value === null
+    ? ''
+    : Number.isInteger(value)
+      ? String(value)
+      : value.toFixed(2).replace('.', ',');

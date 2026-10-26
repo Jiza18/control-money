@@ -70,6 +70,7 @@ import {
   SwipeableCard,
   PageHeader,
   MoneyAmount,
+  DecimalField,
 } from './ui';
 import { tokens } from '../theme';
 import { useToast } from '../contexts/ToastContext';
@@ -774,44 +775,30 @@ export default function SavingsList() {
 
             <FormSection title="Cantidades">
               <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
-                <TextField
+                <DecimalField
                   label="Cantidad objetivo"
-                  type="number"
                   fullWidth
                   value={formData.targetAmount}
-                  onChange={(e) =>
-                    setFormData({ ...formData, targetAmount: Number(e.target.value) })
-                  }
+                  onValueChange={(value) => setFormData((prev) => ({ ...prev, targetAmount: value ?? 0 }))}
                   required
-                  inputProps={{ inputMode: 'decimal' }}
                   InputProps={{ endAdornment: <InputAdornment position="end">€</InputAdornment> }}
                 />
-                <TextField
+                <DecimalField
                   label={selectedGoal ? 'Saldo actual' : 'Saldo inicial'}
-                  type="number"
                   fullWidth
+                  placeholder="0"
                   value={formData.currentAmount}
-                  onChange={(e) =>
-                    setFormData({ ...formData, currentAmount: Number(e.target.value) })
-                  }
-                  required
+                  onValueChange={(value) => setFormData((prev) => ({ ...prev, currentAmount: value ?? 0 }))}
                   helperText={selectedGoal ? 'Solo para corregir. Para añadir dinero usa «Aportar».' : 'Lo que ya tienes ahorrado hoy'}
-                  inputProps={{ inputMode: 'decimal' }}
                   InputProps={{ endAdornment: <InputAdornment position="end">€</InputAdornment> }}
                 />
               </Box>
-              <TextField
+              <DecimalField
                 label="Aporte mensual"
-                type="number"
                 fullWidth
+                placeholder="0"
                 value={formData.monthlyContribution}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    monthlyContribution: Number(e.target.value),
-                  })
-                }
-                required
+                onValueChange={(value) => setFormData((prev) => ({ ...prev, monthlyContribution: value ?? 0 }))}
                 disabled={formData.calculateByDate}
                 helperText={formData.calculateByDate ? 'Se calculará a partir de la fecha objetivo' : undefined}
                 inputProps={{ inputMode: 'decimal' }}
@@ -888,19 +875,12 @@ export default function SavingsList() {
               />
               {formData.withInterest && (
                 <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' }, gap: 2 }}>
-                  <TextField
+                    <DecimalField
                     label="Interés anual (TIN)"
-                    type="number"
                     fullWidth
                     required
-                    value={formData.interestRate ?? ''}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        interestRate: e.target.value === '' ? undefined : Number(e.target.value),
-                      })
-                    }
-                    inputProps={{ inputMode: 'decimal', step: '0.01', min: 0 }}
+                    value={formData.interestRate}
+                    onValueChange={(value) => setFormData((prev) => ({ ...prev, interestRate: value }))}
                     InputProps={{ endAdornment: <InputAdornment position="end">%</InputAdornment> }}
                   />
                   <TextField
@@ -918,19 +898,12 @@ export default function SavingsList() {
                       </MenuItem>
                     ))}
                   </TextField>
-                  <TextField
+                  <DecimalField
                     label="Retención"
-                    type="number"
                     fullWidth
-                    value={formData.interestTaxRate ?? ''}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        interestTaxRate: e.target.value === '' ? undefined : Number(e.target.value),
-                      })
-                    }
+                    value={formData.interestTaxRate}
+                    onValueChange={(value) => setFormData((prev) => ({ ...prev, interestTaxRate: value }))}
                     helperText="Opcional"
-                    inputProps={{ inputMode: 'decimal', step: '0.01', min: 0, max: 100 }}
                     InputProps={{ endAdornment: <InputAdornment position="end">%</InputAdornment> }}
                   />
                 </Box>

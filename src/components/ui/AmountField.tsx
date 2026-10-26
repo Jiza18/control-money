@@ -1,11 +1,7 @@
 import { useEffect, useState } from 'react';
 import { InputAdornment, TextField } from '@mui/material';
 import type { SxProps, Theme } from '@mui/material/styles';
-import { parseAmount } from '../../utils/formatters';
-
-// 1240 → "1240", 560.5 → "560,50"
-const toInputText = (value: number | undefined) =>
-  value === undefined ? '' : Number.isInteger(value) ? String(value) : value.toFixed(2).replace('.', ',');
+import { formatAmountInput as toInputText, parseAmount } from '../../utils/formatters';
 
 interface AmountFieldProps {
   value: number | undefined;

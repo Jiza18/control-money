@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Box, IconButton, InputAdornment, TextField, Tooltip, Typography } from '@mui/material';
+import { Box, IconButton, InputAdornment, Tooltip, Typography } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import RefreshRoundedIcon from '@mui/icons-material/RefreshRounded';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
@@ -13,7 +13,7 @@ import {
   BALANCE_CHANGED_EVENT,
   hasAccountBalances,
 } from '../db/accountBalances';
-import { MoneyAmount } from './ui';
+import { DecimalField, MoneyAmount } from './ui';
 import AccountBalanceField from './AccountBalanceField';
 
 export default function BalanceForm() {
@@ -165,15 +165,15 @@ export default function BalanceForm() {
               </IconButton>
             </Box>
           ) : (
-            <TextField
+            <DecimalField
               id="currentBalance"
               size="small"
               fullWidth
-              type={amountVisible ? 'number' : 'password'}
-              value={balance?.amount || 0}
-              onChange={(e) => handleBalanceUpdate({ amount: Number(e.target.value) })}
-              autoComplete={amountVisible ? 'off' : 'new-password'}
-              inputProps={{ inputMode: 'decimal', readOnly: !amountVisible, style: inputStyle }}
+              masked={!amountVisible}
+              value={balance?.amount}
+              placeholder="0"
+              onValueChange={(value) => handleBalanceUpdate({ amount: value ?? 0 })}
+              inputProps={{ readOnly: !amountVisible, style: inputStyle }}
               InputProps={{
                 startAdornment: <InputAdornment position="start">€</InputAdornment>,
                 endAdornment: visibilityButton(amountVisible, () => setAmountVisible((v) => !v), 'balance actual'),
@@ -210,15 +210,15 @@ export default function BalanceForm() {
           <Typography component="label" htmlFor="monthlyIncome" variant="caption" sx={labelSx}>
             Ingresos mensuales
           </Typography>
-          <TextField
+          <DecimalField
             id="monthlyIncome"
             size="small"
             fullWidth
-            type={incomeVisible ? 'number' : 'password'}
-            value={balance?.monthlyIncome || 0}
-            onChange={(e) => handleBalanceUpdate({ monthlyIncome: Number(e.target.value) })}
-            autoComplete={incomeVisible ? 'off' : 'new-password'}
-            inputProps={{ inputMode: 'decimal', readOnly: !incomeVisible, style: inputStyle }}
+            masked={!incomeVisible}
+            value={balance?.monthlyIncome}
+            placeholder="0"
+            onValueChange={(value) => handleBalanceUpdate({ monthlyIncome: value ?? 0 })}
+            inputProps={{ readOnly: !incomeVisible, style: inputStyle }}
             InputProps={{
               startAdornment: <InputAdornment position="start">€</InputAdornment>,
               endAdornment: visibilityButton(incomeVisible, () => setIncomeVisible((v) => !v), 'ingreso mensual'),

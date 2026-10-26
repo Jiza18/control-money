@@ -26,7 +26,7 @@ import { es } from 'date-fns/locale';
 import { Expense, Account } from '../db/config';
 import { addExpense, updateExpense } from '../db';
 import { getAllAccounts } from '../db/accountsService';
-import { FormSection, AccountChip } from './ui';
+import { FormSection, AccountChip, DecimalField } from './ui';
 import { tokens, getCategoryColor } from '../theme';
 
 const categories = [
@@ -112,45 +112,6 @@ export default function ExpenseForm({
       });
     }
   }, [expenseProp, selectedMonth, prefill]);
-
-  const handleAmountChange = async (newAmount: number) => {
-    setExpense((prev) => ({ ...prev, amount: newAmount }));
-
-    if (!expenseProp?.id || expense.frequency !== 'monthly') return;
-
-    try {
-      const updatedPaymentHistory = [...(expense.paymentHistory || [])];
-
-      const index = updatedPaymentHistory.findIndex((record) => {
-        const recordDate = new Date(record.date);
-        return (
-          recordDate.getMonth() === selectedMonth.getMonth() &&
-          recordDate.getFullYear() === selectedMonth.getFullYear()
-        );
-      });
-
-      if (index >= 0) {
-        updatedPaymentHistory[index] = {
-          ...updatedPaymentHistory[index],
-          amount: newAmount,
-        };
-      } else {
-        updatedPaymentHistory.push({
-          date: selectedMonth,
-          isPaid: false,
-          amount: newAmount,
-        });
-      }
-
-      const updatedExpense = {
-        ...expense,
-        paymentHistory: updatedPaymentHistory,
-      };
-      await updateExpense({ ...updatedExpense, id: expenseProp.id });
-    } catch (error) {
-      console.error('Error updating expense amount:', error);
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -285,23 +246,17 @@ export default function ExpenseForm({
         >
           {/* Sección: Importe y fecha */}
           <FormSection title="Importe y fecha">
-            <TextField
+            <DecimalField
               label="Importe"
-              type="number"
               value={expense.amount}
-              onChange={(e) => {
-                const newAmount = Number(e.target.value);
-                setExpense({ ...expense, amount: newAmount });
-                handleAmountChange(newAmount);
-              }}
+              onValueChange={(value) => setExpense((prev) => ({ ...prev, amount: value ?? 0 }))}
               required
               fullWidth
+              placeholder="0,00"
               InputProps={{
                 endAdornment: <InputAdornment position="end">€</InputAdornment>,
               }}
               inputProps={{
-                inputMode: 'decimal',
-                step: '0.01',
                 style: { fontSize: '1.25rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums' },
               }}
             />
@@ -424,16 +379,13 @@ export default function ExpenseForm({
           {/* Sección: Opciones (sólo si aplica) */}
           {expense.category === 'Préstamos' && expense.frequency !== 'one-time' && (
             <FormSection title="Préstamo">
-              <TextField
+              <DecimalField
                 label="Duración (meses)"
-                type="number"
-                value={expense.duration || ''}
-                onChange={(e) =>
-                  setExpense({ ...expense, duration: Number(e.target.value) })
-                }
+                integer
+                value={expense.duration}
+                onValueChange={(value) => setExpense((prev) => ({ ...prev, duration: value }))}
                 fullWidth
                 required
-                inputProps={{ min: 1, inputMode: 'numeric' }}
                 helperText="Número de meses durante los que se realizará el pago"
               />
             </FormSection>
