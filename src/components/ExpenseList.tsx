@@ -50,6 +50,13 @@ import FavoriteBorderRoundedIcon from '@mui/icons-material/FavoriteBorderRounded
 import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined';
 import SavingsOutlinedIcon from '@mui/icons-material/SavingsOutlined';
 import { toggleSavingsExpensePayment } from '../db/savingsMovementsService';
+import {
+  ACCOUNTS_CHANGED_EVENT,
+  BALANCE_CHANGED_EVENT,
+  applyExpensePayment,
+  hasAccountBalances,
+  hasBalance,
+} from '../db/accountBalances';
 import { format, isSameMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Expense, PaymentRecord } from '../db/config';
@@ -240,6 +247,20 @@ export default function ExpenseList({
     return () => window.removeEventListener('dbTypeChanged', handler as EventListener);
   }, [loadExpenses, loadBalance, loadAccounts]);
 
+  // Saldos de cuentas o saldo actual cambiados desde la barra lateral, un pago o un ahorro
+  useEffect(() => {
+    const handler = () => {
+      loadBalance();
+      loadAccounts();
+    };
+    window.addEventListener(ACCOUNTS_CHANGED_EVENT, handler);
+    window.addEventListener(BALANCE_CHANGED_EVENT, handler);
+    return () => {
+      window.removeEventListener(ACCOUNTS_CHANGED_EVENT, handler);
+      window.removeEventListener(BALANCE_CHANGED_EVENT, handler);
+    };
+  }, [loadBalance, loadAccounts]);
+
   // Al cambiar de mes limpiamos el filtro por cuenta para no quedar
   // atascados en una cuenta que no tiene gastos en el mes seleccionado.
   useEffect(() => {
@@ -351,6 +372,9 @@ export default function ExpenseList({
               ? `Aportados ${formatCurrency(result.amount)} a «${result.goal.name}»`
               : `Aportación a «${result.goal.name}» deshecha`
           );
+          if (result.paid && !result.deducted && hasAccountBalances(accounts)) {
+            toast.info('Asigna una cuenta con saldo a este gasto para que se descuente de ella');
+          }
           await Promise.all([loadExpenses(), loadBalance()]);
           return;
         }
@@ -376,6 +400,8 @@ export default function ExpenseList({
           isSameMonth(new Date(record.date), currentMonth)
         );
         updatedPaymentHistory[index] = {
+          // Conserva la anotación de la cuenta descontada para poder devolverla al desmarcar
+          ...existingPaymentForMonth,
           date: currentMonth,
           isPaid: newPaymentStatus,
           amount: existingPaymentForMonth.amount || expense.amount,
@@ -388,18 +414,22 @@ export default function ExpenseList({
         });
       }
 
-      const updatedExpense = {
-        ...expense,
-        isPaid:
-          expense.frequency === 'one-time' ? newPaymentStatus : expense.isPaid,
-        paymentHistory: updatedPaymentHistory,
-      };
-      // Actualización optimista en memoria: evita recargar toda la tabla
-      // (que mostraba los skeletons y resultaba molesto) al marcar/desmarcar.
+      // Guarda el pago y descuenta del saldo de la cuenta del gasto (o devuelve lo descontado)
+      const updatedExpense = await applyExpensePayment(
+        {
+          ...expense,
+          isPaid:
+            expense.frequency === 'one-time' ? newPaymentStatus : expense.isPaid,
+          paymentHistory: updatedPaymentHistory,
+        },
+        currentMonth,
+        newPaymentStatus
+      );
+      // applyExpensePayment ya lo ha guardado. Se actualiza en memoria en lugar de recargar
+      // toda la tabla (que mostraba los skeletons y resultaba molesto) al marcar/desmarcar.
       setExpenses((prev) =>
         prev.map((e) => (e.id === expense.id ? { ...e, ...updatedExpense } : e))
       );
-      await updateExpense(updatedExpense);
     } catch (error) {
       console.error('Error updating expense payment status:', error);
       // Si falla la persistencia, recargamos para revertir el cambio optimista
@@ -494,12 +524,24 @@ export default function ExpenseList({
       if (ph?.isPaid) agg.paid += e.amount;
       totals.set(key, agg);
     }
+    // Las cuentas con saldo aparecen siempre, aunque no tengan gastos este mes
+    for (const acc of accounts) {
+      if (acc.id != null && hasBalance(acc) && !totals.has(acc.id)) totals.set(acc.id, { total: 0, paid: 0 });
+    }
     const toBucket = (
       key: number | 'none',
       name: string,
       color: string,
       agg: Agg
-    ) => ({ key, name, color, total: agg.total, paid: agg.paid, pending: agg.total - agg.paid });
+    ) => ({
+      key,
+      name,
+      color,
+      total: agg.total,
+      paid: agg.paid,
+      pending: agg.total - agg.paid,
+      balance: key === 'none' ? undefined : accountsById.get(key)?.balance,
+    });
 
     const buckets: ReturnType<typeof toBucket>[] = [];
     for (const acc of accounts) {
@@ -724,7 +766,11 @@ export default function ExpenseList({
           {showAccounts && (
             <SectionCard
               title="Por cuenta"
-              subtitle="Pulsa una cuenta para filtrar sus gastos"
+              subtitle={
+                hasAccountBalances(accounts) && isCurrentMonthView
+                  ? 'Saldo de cada cuenta y lo que te quedará al pagar lo pendiente'
+                  : 'Pulsa una cuenta para filtrar sus gastos'
+              }
               icon={<CreditCardOutlinedIcon />}
             >
               <Box
@@ -737,6 +783,9 @@ export default function ExpenseList({
                 {accountBuckets.map((b) => {
                   const isSelected = selectedAccount === b.key;
                   const paidShare = b.total > 0 ? (b.paid / b.total) * 100 : 0;
+                  // Con saldo y en el mes en curso: saldo, pendiente y lo que quedará tras pagarlo
+                  const withBalance = typeof b.balance === 'number' && isCurrentMonthView;
+                  const remaining = (b.balance ?? 0) - b.pending;
                   return (
                     <Box
                       key={String(b.key)}
@@ -771,23 +820,49 @@ export default function ExpenseList({
                           {b.name}
                         </Typography>
                       </Box>
-                      <MoneyAmount value={b.total} size="md" weight={700} />
-                      <LinearProgress
-                        variant="determinate"
-                        value={paidShare}
-                        aria-label={`Pagado ${Math.round(paidShare)}%`}
-                        sx={{ height: 4, '& .MuiLinearProgress-bar': { backgroundColor: t.success } }}
-                      />
-                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
-                        <Typography variant="caption" sx={{ color: t.textSecondary, display: 'flex', justifyContent: 'space-between', gap: 1 }}>
-                          <span>Pagado</span>
-                          <MoneyAmount value={b.paid} size="xs" tone="success" weight={600} />
-                        </Typography>
-                        <Typography variant="caption" sx={{ color: t.textSecondary, display: 'flex', justifyContent: 'space-between', gap: 1 }}>
-                          <span>Pendiente</span>
-                          <MoneyAmount value={b.pending} size="xs" tone={b.pending > 0 ? 'warning' : 'muted'} weight={600} />
-                        </Typography>
-                      </Box>
+                      {withBalance ? (
+                        <>
+                          <Box>
+                            <Typography variant="caption" sx={{ display: 'block', color: t.textMuted, lineHeight: 1.2 }}>
+                              Saldo
+                            </Typography>
+                            <MoneyAmount value={b.balance!} size="md" weight={700} tone={b.balance! < 0 ? 'danger' : 'default'} />
+                          </Box>
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
+                            <Typography variant="caption" sx={{ color: t.textSecondary, display: 'flex', justifyContent: 'space-between', gap: 1 }}>
+                              <span>Pendiente</span>
+                              <MoneyAmount value={b.pending > 0 ? -b.pending : 0} size="xs" tone={b.pending > 0 ? 'warning' : 'muted'} weight={600} />
+                            </Typography>
+                            <Typography
+                              variant="caption"
+                              sx={{ color: t.textPrimary, fontWeight: 600, display: 'flex', justifyContent: 'space-between', gap: 1, pt: 0.5, mt: 0.25, borderTop: `1px solid ${t.border}` }}
+                            >
+                              <span>Te quedará</span>
+                              <MoneyAmount value={remaining} size="xs" tone={remaining < 0 ? 'danger' : 'success'} weight={700} />
+                            </Typography>
+                          </Box>
+                        </>
+                      ) : (
+                        <>
+                          <MoneyAmount value={b.total} size="md" weight={700} />
+                          <LinearProgress
+                            variant="determinate"
+                            value={paidShare}
+                            aria-label={`Pagado ${Math.round(paidShare)}%`}
+                            sx={{ height: 4, '& .MuiLinearProgress-bar': { backgroundColor: t.success } }}
+                          />
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
+                            <Typography variant="caption" sx={{ color: t.textSecondary, display: 'flex', justifyContent: 'space-between', gap: 1 }}>
+                              <span>Pagado</span>
+                              <MoneyAmount value={b.paid} size="xs" tone="success" weight={600} />
+                            </Typography>
+                            <Typography variant="caption" sx={{ color: t.textSecondary, display: 'flex', justifyContent: 'space-between', gap: 1 }}>
+                              <span>Pendiente</span>
+                              <MoneyAmount value={b.pending} size="xs" tone={b.pending > 0 ? 'warning' : 'muted'} weight={600} />
+                            </Typography>
+                          </Box>
+                        </>
+                      )}
                     </Box>
                   );
                 })}

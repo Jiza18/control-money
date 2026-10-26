@@ -2,14 +2,14 @@ import { isSameMonth, startOfMonth } from 'date-fns';
 import { Expense, SavingsGoal, SavingsMovement } from './config';
 import { getCurrentRepository } from './repositoryAdapter';
 import { signedAmount } from './savingsInterest';
+import { applyToBalance, BALANCE_CHANGED_EVENT } from './accountBalances';
 
 // Operaciones de movimientos de ahorro. Cada movimiento actualiza el saldo de la meta y, si
 // afecta al saldo actual, lo descuenta (aportación) o lo devuelve (retirada).
 
 export type NewSavingsMovement = Omit<SavingsMovement, 'id' | 'goalId'>;
 
-// Evento para que el saldo de la barra lateral y la vista de gastos se recarguen
-export const BALANCE_CHANGED_EVENT = 'balanceChanged';
+export { BALANCE_CHANGED_EVENT };
 
 const round2 = (value: number) => Math.round(value * 100) / 100;
 
@@ -21,22 +21,6 @@ const monthIndex = (date: Date) => date.getFullYear() * 12 + date.getMonth();
 export async function getSavingsMovements(goalId: number): Promise<SavingsMovement[]> {
   const repo = await getCurrentRepository();
   return repo.savingsMovements.findByGoal(goalId);
-}
-
-async function applyToBalance(delta: number): Promise<void> {
-  const repo = await getCurrentRepository();
-  const current = await repo.balance.getCurrent();
-  const base = current ?? { amount: 0, monthlyIncome: 0, date: new Date() };
-  const updated = { ...base, amount: round2(base.amount + delta), date: new Date() };
-  if (current?.id) {
-    await repo.balance.update({ ...updated, id: current.id });
-  } else {
-    await repo.balance.create(updated);
-  }
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent(BALANCE_CHANGED_EVENT));
-    document.dispatchEvent(new CustomEvent('balanceUpdated'));
-  }
 }
 
 async function updateGoalAmount(goal: SavingsGoal, delta: number): Promise<SavingsGoal> {
@@ -61,14 +45,22 @@ export async function addSavingsMovement(
   }
 
   const repo = await getCurrentRepository();
-  // Los intereses los abona el banco: nunca tocan el saldo actual
-  const affectsBalance = input.type !== 'interest' && input.affectsBalance;
-  const movement = { ...input, amount: round2(input.amount), affectsBalance, goalId: goal.id };
+  const amount = round2(input.amount);
+  const delta = signedAmount({ type: input.type, amount });
+  // Los intereses los abona el banco: nunca tocan el saldo actual. Se guarda si de verdad se aplicó,
+  // para que deshacer el movimiento devuelva solo lo que se descontó.
+  const wantsBalance = input.type !== 'interest' && input.affectsBalance;
+  const affectsBalance = wantsBalance ? await applyToBalance(-delta, input.accountId) : false;
+  const movement = {
+    ...input,
+    amount,
+    affectsBalance,
+    accountId: affectsBalance ? input.accountId : undefined,
+    goalId: goal.id,
+  };
   await repo.savingsMovements.create(movement);
 
-  const delta = signedAmount(movement);
   const updatedGoal = await updateGoalAmount(goal, delta);
-  if (affectsBalance) await applyToBalance(-delta);
   if (movement.expenseId) await setExpenseMonthPaid(movement.expenseId, movement.date, true, movement.amount);
   if (updatedGoal.addToExpenses) await syncGoalExpense(updatedGoal);
   return updatedGoal;
@@ -85,7 +77,7 @@ export async function deleteSavingsMovement(
 
   const delta = signedAmount(movement);
   const updatedGoal = await updateGoalAmount(goal, -delta);
-  if (movement.affectsBalance) await applyToBalance(delta);
+  if (movement.affectsBalance) await applyToBalance(delta, movement.accountId);
   if (movement.expenseId) await setExpenseMonthPaid(movement.expenseId, new Date(movement.date), false);
   if (updatedGoal.addToExpenses) await syncGoalExpense(updatedGoal);
   return updatedGoal;
@@ -193,7 +185,7 @@ export async function endExpenseForGoal(goalId: number): Promise<void> {
 export async function toggleSavingsExpensePayment(
   expense: Expense,
   month: Date
-): Promise<{ goal: SavingsGoal; paid: boolean; amount: number } | null> {
+): Promise<{ goal: SavingsGoal; paid: boolean; amount: number; deducted: boolean } | null> {
   if (!expense.id || !expense.savingsGoalId) return null;
   const repo = await getCurrentRepository();
   const goal = await repo.savings.findById(expense.savingsGoalId);
@@ -211,8 +203,11 @@ export async function toggleSavingsExpensePayment(
       note: 'Aporte mensual',
       affectsBalance: true,
       expenseId: expense.id,
+      accountId: expense.accountId,
     });
-    return { goal: updated, paid: true, amount };
+    const movements = await repo.savingsMovements.findByGoal(goal.id!);
+    const created = movements.find((m) => m.expenseId === expense.id && isSameMonth(new Date(m.date), month));
+    return { goal: updated, paid: true, amount, deducted: Boolean(created?.affectsBalance) };
   }
 
   const movements = await repo.savingsMovements.findByGoal(goal.id!);
@@ -221,9 +216,9 @@ export async function toggleSavingsExpensePayment(
   );
   if (linked) {
     const updated = await deleteSavingsMovement(goal, linked);
-    return { goal: updated, paid: false, amount };
+    return { goal: updated, paid: false, amount, deducted: linked.affectsBalance };
   }
   // Pagado sin aportación enlazada (p. ej. marcado antes de enlazarlo): solo se desmarca
   await setExpenseMonthPaid(expense.id, month, false);
-  return { goal, paid: false, amount };
+  return { goal, paid: false, amount, deducted: false };
 }

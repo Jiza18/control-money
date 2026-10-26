@@ -469,7 +469,8 @@ function mapRowToSavingsMovement(row: any): SavingsMovement {
     date: stringToDate(row.date as string),
     note: row.note ? (row.note as string) : undefined,
     affectsBalance: numberToBoolean(row.affects_balance as number),
-    expenseId: row.expense_id != null ? (row.expense_id as number) : undefined
+    expenseId: row.expense_id != null ? (row.expense_id as number) : undefined,
+    accountId: row.account_id != null ? (row.account_id as number) : undefined
   };
 }
 
@@ -482,26 +483,8 @@ class TursoSavingsMovementRepository implements SavingsMovementRepository {
 
   async create(movement: Omit<SavingsMovement, 'id'>): Promise<SavingsMovement> {
     const result = await this.client.execute({
-      sql: `INSERT INTO savings_movements (goal_id, type, amount, date, note, affects_balance, expense_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING *`,
-      args: [
-        movement.goalId,
-        movement.type,
-        movement.amount,
-        dateToString(movement.date),
-        movement.note || null,
-        booleanToNumber(movement.affectsBalance),
-        movement.expenseId ?? null
-      ]
-    });
-
-    return mapRowToSavingsMovement(result.rows[0]);
-  }
-
-  async update(movement: SavingsMovement): Promise<SavingsMovement> {
-    await this.client.execute({
-      sql: `UPDATE savings_movements SET goal_id = ?, type = ?, amount = ?, date = ?, note = ?, affects_balance = ?, expense_id = ?
-            WHERE id = ?`,
+      sql: `INSERT INTO savings_movements (goal_id, type, amount, date, note, affects_balance, expense_id, account_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
       args: [
         movement.goalId,
         movement.type,
@@ -510,6 +493,26 @@ class TursoSavingsMovementRepository implements SavingsMovementRepository {
         movement.note || null,
         booleanToNumber(movement.affectsBalance),
         movement.expenseId ?? null,
+        movement.accountId ?? null
+      ]
+    });
+
+    return mapRowToSavingsMovement(result.rows[0]);
+  }
+
+  async update(movement: SavingsMovement): Promise<SavingsMovement> {
+    await this.client.execute({
+      sql: `UPDATE savings_movements SET goal_id = ?, type = ?, amount = ?, date = ?, note = ?, affects_balance = ?, expense_id = ?,
+            account_id = ? WHERE id = ?`,
+      args: [
+        movement.goalId,
+        movement.type,
+        movement.amount,
+        dateToString(movement.date),
+        movement.note || null,
+        booleanToNumber(movement.affectsBalance),
+        movement.expenseId ?? null,
+        movement.accountId ?? null,
         movement.id!
       ]
     });
@@ -699,8 +702,8 @@ class TursoAccountRepository implements AccountRepository {
 
   async create(account: Omit<Account, 'id'>): Promise<Account> {
     const result = await this.client.execute({
-      sql: 'INSERT INTO accounts (name, color, created_at) VALUES (?, ?, ?) RETURNING *',
-      args: [account.name, account.color, dateToString(account.createdAt)]
+      sql: 'INSERT INTO accounts (name, color, created_at, balance) VALUES (?, ?, ?, ?) RETURNING *',
+      args: [account.name, account.color, dateToString(account.createdAt), account.balance ?? null]
     });
 
     return this.mapRowToAccount(result.rows[0]);
@@ -708,8 +711,8 @@ class TursoAccountRepository implements AccountRepository {
 
   async update(account: Account): Promise<Account> {
     await this.client.execute({
-      sql: 'UPDATE accounts SET name = ?, color = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-      args: [account.name, account.color, account.id!]
+      sql: 'UPDATE accounts SET name = ?, color = ?, balance = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      args: [account.name, account.color, account.balance ?? null, account.id!]
     });
 
     return account;
@@ -749,7 +752,8 @@ class TursoAccountRepository implements AccountRepository {
       id: row.id as number,
       name: row.name as string,
       color: row.color as string,
-      createdAt: stringToDate(row.created_at as string)
+      createdAt: stringToDate(row.created_at as string),
+      balance: row.balance != null ? (row.balance as number) : undefined
     };
   }
 }
@@ -926,7 +930,8 @@ class TursoDatabaseOperations implements DatabaseOperations {
       id: row.id,
       name: row.name,
       color: row.color,
-      createdAt: stringToDate(row.created_at as string)
+      createdAt: stringToDate(row.created_at as string),
+      balance: row.balance != null ? row.balance : undefined
     }));
 
     // Exportar Google Sheets config
@@ -1021,8 +1026,8 @@ class TursoDatabaseOperations implements DatabaseOperations {
     if (data.savingsMovements) {
       for (const movement of data.savingsMovements) {
         await this.client.execute({
-          sql: `INSERT INTO savings_movements (goal_id, type, amount, date, note, affects_balance, expense_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          sql: `INSERT INTO savings_movements (goal_id, type, amount, date, note, affects_balance, expense_id, account_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
           args: [
             movement.goalId,
             movement.type,
@@ -1030,7 +1035,8 @@ class TursoDatabaseOperations implements DatabaseOperations {
             dateToString(movement.date),
             movement.note || null,
             booleanToNumber(Boolean(movement.affectsBalance)),
-            movement.expenseId ?? null
+            movement.expenseId ?? null,
+            movement.accountId ?? null
           ]
         });
       }
@@ -1063,12 +1069,13 @@ class TursoDatabaseOperations implements DatabaseOperations {
     if (data.accounts) {
       for (const account of data.accounts) {
         await this.client.execute({
-          sql: 'INSERT INTO accounts (id, name, color, created_at) VALUES (?, ?, ?, ?)',
+          sql: 'INSERT INTO accounts (id, name, color, created_at, balance) VALUES (?, ?, ?, ?, ?)',
           args: [
             account.id ?? null,
             account.name,
             account.color,
-            dateToString(account.createdAt ?? new Date())
+            dateToString(account.createdAt ?? new Date()),
+            account.balance ?? null
           ]
         });
       }

@@ -4,6 +4,9 @@ export interface PaymentRecord {
   date: Date;
   isPaid: boolean;
   amount?: number; // Cantidad específica para este mes (solo para gastos mensuales)
+  // Al pagarlo se descontó del saldo de esta cuenta; al desmarcarlo se devuelve exactamente esto
+  deductedFrom?: number;
+  deductedAmount?: number;
 }
 
 export interface Expense {
@@ -26,6 +29,9 @@ export interface Account {
   name: string;
   color: string; // Color hex para la etiqueta
   createdAt: Date;
+  // Dinero en la cuenta. Sin definir = no se lleva su saldo. Con alguna cuenta con saldo,
+  // el saldo actual global (Balance.amount) pasa a ser la suma de las cuentas.
+  balance?: number;
 }
 
 export interface Balance {
@@ -66,6 +72,7 @@ export interface SavingsMovement {
   note?: string;
   affectsBalance: boolean; // Si se descontó (aportación) o sumó (retirada) al saldo actual
   expenseId?: number; // Gasto de aporte mensual que pagó esta aportación (ver Expense.savingsGoalId)
+  accountId?: number; // Cuenta de la que salió (aportación) o a la que volvió (retirada) el dinero
 }
 
 export interface Investment {

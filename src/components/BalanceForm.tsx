@@ -1,41 +1,64 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Box, IconButton, InputAdornment, TextField, Tooltip, Typography } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import RefreshRoundedIcon from '@mui/icons-material/RefreshRounded';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
 import { getCurrentBalance, updateBalance } from '../db';
-import { Balance } from '../db/config';
+import { Account, Balance } from '../db/config';
 import { tokens } from '../theme';
-import { BALANCE_CHANGED_EVENT } from '../db/savingsMovementsService';
+import { getAllAccounts } from '../db/accountsService';
+import {
+  ACCOUNTS_CHANGED_EVENT,
+  BALANCE_CHANGED_EVENT,
+  hasAccountBalances,
+} from '../db/accountBalances';
+import { MoneyAmount } from './ui';
+import AccountBalanceField from './AccountBalanceField';
 
 export default function BalanceForm() {
   const theme = useTheme();
   const t = tokens[theme.palette.mode];
   const [balance, setBalance] = useState<Balance | null>(null);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [incomeVisible, setIncomeVisible] = useState(true);
   const [amountVisible, setAmountVisible] = useState(true);
 
-  useEffect(() => {
-    const loadBalance = async () => {
-      const currentBalance = await getCurrentBalance();
-      setBalance(currentBalance || {
-        amount: 0,
-        monthlyIncome: 0,
-        date: new Date()
-      });
-    };
-    loadBalance();
-
-    const handler = () => loadBalance();
-    window.addEventListener('dbTypeChanged', handler as any);
-    // Aportaciones y retiradas de ahorros cambian el saldo desde fuera
-    window.addEventListener(BALANCE_CHANGED_EVENT, handler);
-    return () => {
-      window.removeEventListener('dbTypeChanged', handler as any);
-      window.removeEventListener(BALANCE_CHANGED_EVENT, handler);
-    };
+  const loadBalance = useCallback(async () => {
+    const currentBalance = await getCurrentBalance();
+    setBalance(currentBalance || {
+      amount: 0,
+      monthlyIncome: 0,
+      date: new Date()
+    });
   }, []);
+
+  const loadAccounts = useCallback(async () => {
+    try {
+      setAccounts(await getAllAccounts());
+    } catch (error) {
+      console.error('Error loading accounts:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadBalance();
+    loadAccounts();
+
+    const handler = () => {
+      loadBalance();
+      loadAccounts();
+    };
+    window.addEventListener('dbTypeChanged', handler);
+    // Saldos de cuentas, pagos y aportaciones a ahorros cambian el saldo desde fuera
+    window.addEventListener(BALANCE_CHANGED_EVENT, handler);
+    window.addEventListener(ACCOUNTS_CHANGED_EVENT, handler);
+    return () => {
+      window.removeEventListener('dbTypeChanged', handler);
+      window.removeEventListener(BALANCE_CHANGED_EVENT, handler);
+      window.removeEventListener(ACCOUNTS_CHANGED_EVENT, handler);
+    };
+  }, [loadBalance, loadAccounts]);
 
   const handleBalanceUpdate = async (updates: Partial<Balance>) => {
     if (!balance) return;
@@ -48,32 +71,35 @@ export default function BalanceForm() {
 
     await updateBalance(updatedBalance);
     setBalance(updatedBalance);
-    
+
     // Emitir evento para actualizar el componente Expenses
     const event = new CustomEvent('balanceUpdated');
     document.dispatchEvent(event);
   };
 
-  const fields = [
-    {
-      id: 'currentBalance',
-      label: 'Saldo actual',
-      value: balance?.amount || 0,
-      visible: amountVisible,
-      toggle: () => setAmountVisible((v) => !v),
-      onChange: (value: number) => handleBalanceUpdate({ amount: value }),
-      hideLabel: 'balance actual',
-    },
-    {
-      id: 'monthlyIncome',
-      label: 'Ingresos mensuales',
-      value: balance?.monthlyIncome || 0,
-      visible: incomeVisible,
-      toggle: () => setIncomeVisible((v) => !v),
-      onChange: (value: number) => handleBalanceUpdate({ monthlyIncome: value }),
-      hideLabel: 'ingreso mensual',
-    },
-  ];
+  // Con alguna cuenta con saldo, el saldo actual es la suma de las cuentas
+  const byAccount = hasAccountBalances(accounts);
+
+  const visibilityButton = (visible: boolean, toggle: () => void, label: string) => (
+    <InputAdornment position="end">
+      <IconButton
+        size="small"
+        edge="end"
+        onClick={toggle}
+        aria-label={visible ? `Ocultar ${label}` : `Mostrar ${label}`}
+        sx={{ width: 28, height: 28 }}
+      >
+        {visible ? (
+          <VisibilityOutlinedIcon sx={{ fontSize: '1rem' }} />
+        ) : (
+          <VisibilityOffOutlinedIcon sx={{ fontSize: '1rem' }} />
+        )}
+      </IconButton>
+    </InputAdornment>
+  );
+
+  const labelSx = { display: 'block', color: t.textSecondary, fontWeight: 500, mb: 0.5 } as const;
+  const inputStyle = { fontVariantNumeric: 'tabular-nums', fontWeight: 600 } as const;
 
   return (
     <Box
@@ -104,52 +130,101 @@ export default function BalanceForm() {
       </Box>
 
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
-        {fields.map((f) => (
-          <Box key={f.id}>
-            <Typography
-              component="label"
-              htmlFor={f.id}
-              variant="caption"
-              sx={{ display: 'block', color: t.textSecondary, fontWeight: 500, mb: 0.5 }}
+        {/* Saldo actual: suma de las cuentas o importe manual */}
+        <Box>
+          <Typography component="label" htmlFor="currentBalance" variant="caption" sx={labelSx}>
+            Saldo actual
+          </Typography>
+          {byAccount ? (
+            <Box
+              id="currentBalance"
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 1,
+                px: 1.5,
+                minHeight: 40,
+                borderRadius: '10px',
+                border: `1px solid ${t.border}`,
+                backgroundColor: t.surface,
+              }}
             >
-              {f.label}
-            </Typography>
+              <MoneyAmount value={balance?.amount || 0} size="md" weight={700} hidden={!amountVisible} />
+              <IconButton
+                size="small"
+                onClick={() => setAmountVisible((v) => !v)}
+                aria-label={amountVisible ? 'Ocultar balance actual' : 'Mostrar balance actual'}
+                sx={{ width: 28, height: 28, mr: -0.75 }}
+              >
+                {amountVisible ? (
+                  <VisibilityOutlinedIcon sx={{ fontSize: '1rem' }} />
+                ) : (
+                  <VisibilityOffOutlinedIcon sx={{ fontSize: '1rem' }} />
+                )}
+              </IconButton>
+            </Box>
+          ) : (
             <TextField
-              id={f.id}
+              id="currentBalance"
               size="small"
               fullWidth
-              type={f.visible ? 'number' : 'password'}
-              value={f.value}
-              onChange={(e) => f.onChange(Number(e.target.value))}
-              autoComplete={f.visible ? 'off' : 'new-password'}
-              inputProps={{
-                inputMode: 'decimal',
-                readOnly: !f.visible,
-                style: { fontVariantNumeric: 'tabular-nums', fontWeight: 600 },
-              }}
+              type={amountVisible ? 'number' : 'password'}
+              value={balance?.amount || 0}
+              onChange={(e) => handleBalanceUpdate({ amount: Number(e.target.value) })}
+              autoComplete={amountVisible ? 'off' : 'new-password'}
+              inputProps={{ inputMode: 'decimal', readOnly: !amountVisible, style: inputStyle }}
               InputProps={{
                 startAdornment: <InputAdornment position="start">€</InputAdornment>,
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <IconButton
-                      size="small"
-                      edge="end"
-                      onClick={f.toggle}
-                      aria-label={f.visible ? `Ocultar ${f.hideLabel}` : `Mostrar ${f.hideLabel}`}
-                      sx={{ width: 28, height: 28 }}
-                    >
-                      {f.visible ? (
-                        <VisibilityOutlinedIcon sx={{ fontSize: '1rem' }} />
-                      ) : (
-                        <VisibilityOffOutlinedIcon sx={{ fontSize: '1rem' }} />
-                      )}
-                    </IconButton>
-                  </InputAdornment>
-                ),
+                endAdornment: visibilityButton(amountVisible, () => setAmountVisible((v) => !v), 'balance actual'),
               }}
             />
+          )}
+          {byAccount && (
+            <Typography variant="caption" sx={{ display: 'block', color: t.textMuted, mt: 0.5 }}>
+              Suma de tus cuentas
+            </Typography>
+          )}
+        </Box>
+
+        {/* Saldo de cada cuenta */}
+        {accounts.length > 0 && (
+          <Box>
+            <Typography variant="caption" sx={labelSx}>
+              {byAccount ? 'Cuentas' : 'Saldo por cuenta'}
+            </Typography>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+              {accounts.map((account) => (
+                <AccountBalanceField key={account.id} account={account} hidden={!amountVisible} />
+              ))}
+            </Box>
+            {!byAccount && (
+              <Typography variant="caption" sx={{ display: 'block', color: t.textMuted, mt: 0.75, lineHeight: 1.35 }}>
+                Si pones el saldo de tus cuentas, el saldo actual será su suma.
+              </Typography>
+            )}
           </Box>
-        ))}
+        )}
+
+        <Box>
+          <Typography component="label" htmlFor="monthlyIncome" variant="caption" sx={labelSx}>
+            Ingresos mensuales
+          </Typography>
+          <TextField
+            id="monthlyIncome"
+            size="small"
+            fullWidth
+            type={incomeVisible ? 'number' : 'password'}
+            value={balance?.monthlyIncome || 0}
+            onChange={(e) => handleBalanceUpdate({ monthlyIncome: Number(e.target.value) })}
+            autoComplete={incomeVisible ? 'off' : 'new-password'}
+            inputProps={{ inputMode: 'decimal', readOnly: !incomeVisible, style: inputStyle }}
+            InputProps={{
+              startAdornment: <InputAdornment position="start">€</InputAdornment>,
+              endAdornment: visibilityButton(incomeVisible, () => setIncomeVisible((v) => !v), 'ingreso mensual'),
+            }}
+          />
+        </Box>
       </Box>
     </Box>
   );

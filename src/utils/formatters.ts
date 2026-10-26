@@ -66,3 +66,22 @@ export const calculateProgress = (current: number, target: number): number => {
 export const formatPercentage = (percentage: number, decimals: number = 0): string => {
   return `${percentage.toFixed(decimals)}%`;
 };
+
+/**
+ * Interpreta un importe escrito a mano en formato español o con punto decimal:
+ * "1.240,50" → 1240.5, "1240,5" → 1240.5, "1.240" → 1240, "12.5" → 12.5
+ * @returns número, undefined si está vacío o null si no es un importe válido
+ */
+export const parseAmount = (text: string): number | undefined | null => {
+  const clean = text.trim().replace(/\s|€/g, '');
+  if (clean === '') return undefined;
+  let normalized = clean;
+  if (clean.includes(',')) {
+    normalized = clean.replace(/\./g, '').replace(',', '.');
+  } else if (/^-?\d{1,3}(\.\d{3})+$/.test(clean)) {
+    // Solo puntos de miles: "1.240" o "12.500.000"
+    normalized = clean.replace(/\./g, '');
+  }
+  const value = Number(normalized);
+  return Number.isFinite(value) ? value : null;
+};

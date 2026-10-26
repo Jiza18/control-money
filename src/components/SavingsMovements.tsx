@@ -8,6 +8,7 @@ import {
   DialogContent,
   DialogTitle,
   FormControlLabel,
+  MenuItem,
   IconButton,
   InputAdornment,
   Skeleton,
@@ -31,7 +32,10 @@ import PercentRoundedIcon from '@mui/icons-material/PercentRounded';
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
 import HistoryRoundedIcon from '@mui/icons-material/HistoryRounded';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
-import { Expense, SavingsGoal, SavingsMovement } from '../db/config';
+import { Account, Expense, SavingsGoal, SavingsMovement } from '../db/config';
+import { getAllAccounts } from '../db/accountsService';
+import { hasBalance } from '../db/accountBalances';
+import { parseAmount } from '../utils/formatters';
 import { getCurrentBalance } from '../db';
 import {
   addSavingsMovement,
@@ -142,6 +146,9 @@ export function SavingsMovementDialog({
   const [saving, setSaving] = useState(false);
   const [goalExpense, setGoalExpense] = useState<Expense | null>(null);
   const [markExpensePaid, setMarkExpensePaid] = useState(true);
+  // Cuentas con saldo: el dinero sale de (o vuelve a) una de ellas
+  const [balanceAccounts, setBalanceAccounts] = useState<Account[]>([]);
+  const [accountId, setAccountId] = useState<number | ''>('');
 
   useEffect(() => {
     if (!open) return;
@@ -152,11 +159,27 @@ export function SavingsMovementDialog({
     setAffectsBalance(true);
     setMarkExpensePaid(true);
     setGoalExpense(null);
-    if (goal?.id && goal.addToExpenses) {
-      findGoalExpense(goal.id)
-        .then((e) => setGoalExpense(e ?? null))
-        .catch(() => setGoalExpense(null));
-    }
+    setBalanceAccounts([]);
+    setAccountId('');
+    Promise.all([
+      getAllAccounts(),
+      goal?.id && goal.addToExpenses ? findGoalExpense(goal.id) : Promise.resolve(undefined),
+    ])
+      .then(([accounts, expense]) => {
+        const tracked = accounts.filter(hasBalance);
+        setGoalExpense(expense ?? null);
+        setBalanceAccounts(tracked);
+        // Por defecto: la cuenta del aporte mensual, la última usada o la primera con saldo
+        let last: number | null = null;
+        try {
+          last = Number(localStorage.getItem('lastSavingsAccountId')) || null;
+        } catch {
+          last = null;
+        }
+        const preferred = [expense?.accountId, last].find((id) => tracked.some((a) => a.id === id));
+        setAccountId(preferred ?? tracked[0]?.id ?? '');
+      })
+      .catch(() => setBalanceAccounts([]));
     getCurrentBalance()
       .then((b) => setBalance(b ? b.amount : 0))
       .catch(() => setBalance(null));
@@ -164,11 +187,13 @@ export function SavingsMovementDialog({
 
   if (!goal) return null;
 
-  const value = Number(amount.replace(',', '.'));
+  const value = parseAmount(amount) ?? 0;
   const valid = value > 0 && Number.isFinite(value);
   const tooMuch = type === 'withdrawal' && valid && value > goal.currentAmount + 0.005;
   const signed = !valid ? 0 : type === 'withdrawal' ? -value : value;
-  const touchesBalance = type !== 'interest' && affectsBalance;
+  const byAccount = balanceAccounts.length > 0;
+  const touchesBalance = type !== 'interest' && affectsBalance && (!byAccount || accountId !== '');
+  const selectedAccount = balanceAccounts.find((a) => a.id === accountId);
   const showInterest = hasInterest(goal) || type === 'interest';
   // Si la meta tiene su aporte en Gastos y ese mes está pendiente, la aportación lo marca como pagado
   const canMarkExpense = type === 'deposit' && goalExpense !== null && isExpenseMonthPending(goalExpense, date);
@@ -184,8 +209,16 @@ export function SavingsMovementDialog({
         date,
         note: note.trim() || undefined,
         affectsBalance: touchesBalance,
+        accountId: byAccount && touchesBalance ? (accountId as number) : undefined,
         expenseId: canMarkExpense && markExpensePaid ? goalExpense!.id : undefined,
       });
+      if (byAccount && touchesBalance) {
+        try {
+          localStorage.setItem('lastSavingsAccountId', String(accountId));
+        } catch {
+          // Preferencia de comodidad: si no se puede guardar, no pasa nada
+        }
+      }
       toast.success(savedMessages[type]);
       onSaved(updated);
       onClose();
@@ -291,15 +324,47 @@ export function SavingsMovementDialog({
               abonó otra cifra, corrige el importe.
             </Typography>
           ) : (
-            <FormControlLabel
-              control={<Checkbox checked={affectsBalance} onChange={(e) => setAffectsBalance(e.target.checked)} />}
-              label={
-                <Typography variant="body2" sx={{ color: t.textPrimary }}>
-                  {type === 'deposit' ? 'Descontar de mi saldo actual' : 'Devolver a mi saldo actual'}
-                </Typography>
-              }
-              sx={{ mx: 0, px: 1, py: 0.25, borderRadius: '10px', border: `1px solid ${t.border}` }}
-            />
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              <FormControlLabel
+                control={<Checkbox checked={affectsBalance} onChange={(e) => setAffectsBalance(e.target.checked)} />}
+                label={
+                  <Typography variant="body2" sx={{ color: t.textPrimary }}>
+                    {type === 'deposit' ? 'Descontar de mi saldo actual' : 'Devolver a mi saldo actual'}
+                  </Typography>
+                }
+                sx={{ mx: 0, px: 1, py: 0.25, borderRadius: '10px', border: `1px solid ${t.border}` }}
+              />
+              {byAccount && affectsBalance && (
+                <TextField
+                  select
+                  fullWidth
+                  label={type === 'deposit' ? 'Desde la cuenta' : 'A la cuenta'}
+                  value={accountId}
+                  onChange={(e) => setAccountId(Number(e.target.value))}
+                  SelectProps={{
+                    renderValue: (id) => {
+                      const a = balanceAccounts.find((acc) => acc.id === id);
+                      if (!a) return '';
+                      return (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Box sx={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: a.color, flexShrink: 0 }} />
+                          <Box component="span" sx={{ flex: 1 }}>{a.name}</Box>
+                          <MoneyAmount value={a.balance ?? 0} size="sm" tone="muted" weight={500} />
+                        </Box>
+                      );
+                    },
+                  }}
+                >
+                  {balanceAccounts.map((a) => (
+                    <MenuItem key={a.id} value={a.id} sx={{ gap: 1 }}>
+                      <Box sx={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: a.color, flexShrink: 0 }} />
+                      <Box component="span" sx={{ flex: 1 }}>{a.name}</Box>
+                      <MoneyAmount value={a.balance ?? 0} size="sm" tone="muted" weight={500} />
+                    </MenuItem>
+                  ))}
+                </TextField>
+              )}
+            </Box>
           )}
 
           {canMarkExpense && (
@@ -325,6 +390,8 @@ export function SavingsMovementDialog({
             }}
           >
             {summaryRow('Meta', goal.currentAmount, goal.currentAmount + signed)}
+            {touchesBalance && byAccount && selectedAccount && hasBalance(selectedAccount) &&
+              summaryRow(selectedAccount.name, selectedAccount.balance, selectedAccount.balance - signed)}
             {touchesBalance && balance !== null && summaryRow('Saldo actual', balance, balance - signed)}
           </Box>
         </DialogContent>

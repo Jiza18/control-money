@@ -12,7 +12,16 @@ import { useTheme } from '@mui/material/styles';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
 import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
-import { AccountChip } from './ui';
+import { AccountChip, MoneyAmount } from './ui';
+import AccountBalanceField from './AccountBalanceField';
+import { InputAdornment } from '@mui/material';
+import {
+  ACCOUNTS_CHANGED_EVENT,
+  accountsTotal,
+  hasAccountBalances,
+  recalcTotalBalance,
+} from '../db/accountBalances';
+import { parseAmount } from '../utils/formatters';
 import {
   getAllAccounts,
   addAccount,
@@ -42,6 +51,7 @@ export default function AccountsConfig() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [name, setName] = useState('');
   const [color, setColor] = useState(COLOR_OPTIONS[0]);
+  const [initialBalance, setInitialBalance] = useState('');
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
@@ -50,7 +60,11 @@ export default function AccountsConfig() {
     // Las cuentas viven en la BD activa: recargar al cambiar entre local y nube
     const handler = () => loadAccounts();
     window.addEventListener('dbTypeChanged', handler);
-    return () => window.removeEventListener('dbTypeChanged', handler);
+    window.addEventListener(ACCOUNTS_CHANGED_EVENT, handler);
+    return () => {
+      window.removeEventListener('dbTypeChanged', handler);
+      window.removeEventListener(ACCOUNTS_CHANGED_EVENT, handler);
+    };
   }, []);
 
   const loadAccounts = async () => {
@@ -72,11 +86,18 @@ export default function AccountsConfig() {
       toast.error('Ya existe una cuenta con ese nombre');
       return;
     }
+    const balance = parseAmount(initialBalance);
+    if (balance === null) {
+      toast.error('El saldo no es un importe válido');
+      return;
+    }
     setSaving(true);
     try {
-      await addAccount({ name: trimmed, color, createdAt: new Date() });
+      await addAccount({ name: trimmed, color, createdAt: new Date(), balance });
+      if (balance !== undefined) await recalcTotalBalance();
       setName('');
       setColor(COLOR_OPTIONS[0]);
+      setInitialBalance('');
       await loadAccounts();
       toast.success('Cuenta creada');
     } catch (error) {
@@ -91,6 +112,8 @@ export default function AccountsConfig() {
     setDeletingId(id);
     try {
       await deleteAccount(id);
+      // Si llevaba saldo, el total de las cuentas cambia
+      await recalcTotalBalance();
       await loadAccounts();
       toast.success('Cuenta eliminada');
     } catch (error) {
@@ -104,8 +127,9 @@ export default function AccountsConfig() {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
       <Typography variant="body2" sx={{ color: t.textSecondary }}>
-        Crea las cuentas o métodos de pago (efectivo, tarjetas, bancos…) que
-        podrás asignar a cada gasto.
+        Crea las cuentas o métodos de pago (efectivo, tarjetas, bancos…) que podrás asignar a cada
+        gasto. Si indicas su saldo, tu saldo actual será la suma de las cuentas y, al marcar un gasto
+        como pagado, se descontará de la suya.
       </Typography>
 
       {/* Lista de cuentas existentes */}
@@ -139,7 +163,10 @@ export default function AccountsConfig() {
                 borderTop: index === 0 ? 'none' : `1px solid ${t.border}`,
               }}
             >
-              <AccountChip name={account.name} color={account.color} size="medium" />
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <AccountChip name={account.name} color={account.color} size="medium" />
+              </Box>
+              <AccountBalanceField account={account} showName={false} />
               <Tooltip title="Eliminar cuenta">
                 <span>
                   <IconButton
@@ -158,6 +185,27 @@ export default function AccountsConfig() {
               </Tooltip>
             </Box>
           ))}
+          {hasAccountBalances(accounts) && (
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 1,
+                px: 2,
+                py: 1.25,
+                borderTop: `1px solid ${t.border}`,
+                backgroundColor: t.surfaceSoft,
+              }}
+            >
+              <Typography variant="body2" sx={{ fontWeight: 600, color: t.textPrimary }}>
+                Total en cuentas
+              </Typography>
+              <Box sx={{ mr: 6 }}>
+                <MoneyAmount value={accountsTotal(accounts)} size="md" />
+              </Box>
+            </Box>
+          )}
         </Box>
       )}
 
@@ -187,6 +235,16 @@ export default function AccountsConfig() {
               handleAdd();
             }
           }}
+          fullWidth
+        />
+        <TextField
+          label="Saldo actual (opcional)"
+          placeholder="Ej.: 1.240,50"
+          value={initialBalance}
+          onChange={(e) => setInitialBalance(e.target.value)}
+          helperText="Lo que tienes ahora en esta cuenta. Puedes ponerlo o cambiarlo más tarde."
+          inputProps={{ inputMode: 'decimal' }}
+          InputProps={{ endAdornment: <InputAdornment position="end">€</InputAdornment> }}
           fullWidth
         />
 

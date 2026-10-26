@@ -50,8 +50,8 @@ async function seedTursoAccountsFromLocal(client: Client): Promise<void> {
 
     for (const account of localAccounts) {
       await client.execute({
-        sql: 'INSERT OR IGNORE INTO accounts (id, name, color, created_at) VALUES (?, ?, ?, ?)',
-        args: [account.id ?? null, account.name, account.color, dateToString(account.createdAt ?? new Date())]
+        sql: 'INSERT OR IGNORE INTO accounts (id, name, color, created_at, balance) VALUES (?, ?, ?, ?, ?)',
+        args: [account.id ?? null, account.name, account.color, dateToString(account.createdAt ?? new Date()), account.balance ?? null]
       });
     }
     if (localAccounts.length > 0) {
