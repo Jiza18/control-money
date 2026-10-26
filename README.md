@@ -1,12 +1,11 @@
 # Control Money
 
-Aplicación React para gestionar gastos, metas de ahorro e inversiones. Construida con Vite + TypeScript y diseñada con un enfoque responsive: tarjetas en móvil y tablas en escritorio, encabezados visibles y botones de acción flotantes (FAB) para una interacción rápida.
+Aplicación React para gestionar gastos, cuentas y metas de ahorro. Construida con Vite + TypeScript y diseñada con un enfoque responsive: tarjetas en móvil y tablas en escritorio, encabezados visibles y botones de acción flotantes (FAB) para una interacción rápida.
 
 ## Características principales
 
 - Gastos: alta/edición/eliminación, filtrado por mes y vista adaptada a móvil/desktop.
 - Ahorros: gestión de metas, tarjetas en móvil y FAB para crear nuevas metas.
-- Inversiones: listado y edición de inversiones activas, encabezado de sección con título grande.
 - UI consistente: encabezado visible, soporte dark/light, FAB verde para acciones principales.
 - Selección de base de datos: Local (IndexedDB) o Nube (Turso) con fallback automático.
 - Sincronización manual entre Local y Turso (opcional) mediante servicio de sync.
@@ -49,7 +48,7 @@ npm run preview
 
 ## Uso de la aplicación (guía rápida)
 
-- Navega entre Gastos, Ahorros e Inversiones desde la navegación principal.
+- Navega entre Gastos, Ahorros y Configuración desde la navegación principal.
 - En móvil verás tarjetas; en escritorio, tablas. Usa el botón flotante (FAB) para crear nuevos registros.
 - El indicador de BD (“BD: Local / Nube (Turso)”) permite cambiar el tipo de almacenamiento en tiempo de ejecución. Al cambiar, la app reconecta y recarga datos.
 - La pantalla de “Configuración de Base de Datos” permite comprobar conexión y ejecutar sincronización manual entre Local y Turso.
@@ -135,7 +134,7 @@ La sincronización utiliza `src/db/syncService.ts` y compara metadatos básicos 
 ## Arquitectura de datos (resumen)
 
 - Repositorios y fábrica: `src/db/repositories/repositoryFactory.ts` selecciona `IndexedDbRepository` o `TursoRepository` según configuración.
-- Adaptador en runtime: `src/db/repositoryAdapter.ts` expone servicios (gastos, ahorros, inversiones) que delegan en el repositorio activo.
+- Adaptador en runtime: `src/db/repositoryAdapter.ts` expone servicios (gastos, cuentas, ahorros) que delegan en el repositorio activo.
 - Config de entorno: `src/config/env.ts` centraliza lectura de variables y validaciones básicas.
 - Indicadores/Configuración en UI: `src/components/DatabaseIndicator.tsx` y `src/components/DatabaseConfig.tsx`.
 

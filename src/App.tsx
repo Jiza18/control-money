@@ -23,7 +23,6 @@ import { getTheme } from './theme';
 import { tokens } from './theme';
 import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 import SavingsOutlinedIcon from '@mui/icons-material/SavingsOutlined';
-import TrendingUpRoundedIcon from '@mui/icons-material/TrendingUpRounded';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import MenuRoundedIcon from '@mui/icons-material/MenuRounded';
 import KeyboardDoubleArrowLeftRoundedIcon from '@mui/icons-material/KeyboardDoubleArrowLeftRounded';
@@ -58,8 +57,7 @@ function AppInner({ theme, toggleTheme }: { theme: 'light' | 'dark'; toggleTheme
     const path = location.pathname;
     if (path.startsWith('/expenses')) setBottomNavValue(0);
     else if (path.startsWith('/savings')) setBottomNavValue(1);
-    else if (path.startsWith('/investments')) setBottomNavValue(2);
-    else if (path.startsWith('/configuration')) setBottomNavValue(3);
+    else if (path.startsWith('/configuration')) setBottomNavValue(2);
     else setBottomNavValue(-1);
   }, [location.pathname]);
 
@@ -79,7 +77,6 @@ function AppInner({ theme, toggleTheme }: { theme: 'light' | 'dark'; toggleTheme
   const navLinks = [
     { path: 'expenses', label: 'Gastos', icon: <ReceiptLongOutlinedIcon fontSize="small" /> },
     { path: 'savings', label: 'Ahorros', icon: <SavingsOutlinedIcon fontSize="small" /> },
-    { path: 'investments', label: 'Inversiones', icon: <TrendingUpRoundedIcon fontSize="small" /> },
     { path: 'configuration', label: 'Configuración', icon: <SettingsOutlinedIcon fontSize="small" /> },
   ];
 
@@ -374,8 +371,7 @@ function AppInner({ theme, toggleTheme }: { theme: 'light' | 'dark'; toggleTheme
             onChange={(_, newValue: number) => {
               if (newValue === 0) navigate('/expenses');
               else if (newValue === 1) navigate('/savings');
-              else if (newValue === 2) navigate('/investments');
-              else if (newValue === 3) navigate('/configuration');
+              else if (newValue === 2) navigate('/configuration');
               setBottomNavValue(newValue);
             }}
             sx={{ height: 'calc(64px + env(safe-area-inset-bottom))', pb: 'env(safe-area-inset-bottom)' }}

@@ -73,24 +73,6 @@ CREATE TABLE IF NOT EXISTS savings_goals (
   updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
--- Tabla de inversiones
-CREATE TABLE IF NOT EXISTS investments (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL,
-  type TEXT NOT NULL CHECK (type IN ('fixed-deposit', 'savings-account', 'government-bond', 'mutual-fund', 'other')),
-  initial_amount REAL NOT NULL,
-  current_amount REAL NOT NULL,
-  annual_rate REAL NOT NULL,
-  start_date TEXT NOT NULL,
-  term_months INTEGER NOT NULL,
-  maturity_date TEXT NOT NULL,
-  compounding_frequency TEXT NOT NULL CHECK (compounding_frequency IN ('daily', 'monthly', 'quarterly', 'semi-annual', 'annual')),
-  is_active BOOLEAN NOT NULL DEFAULT 1,
-  notes TEXT,
-  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-);
-
 -- Tabla de cuentas (con qué se paga cada gasto, expenses.account_id apunta aquí)
 CREATE TABLE IF NOT EXISTS accounts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -161,10 +143,6 @@ CREATE INDEX IF NOT EXISTS idx_balance_date ON balance(date);
 CREATE INDEX IF NOT EXISTS idx_savings_start_date ON savings_goals(start_date);
 CREATE INDEX IF NOT EXISTS idx_savings_completed ON savings_goals(completed);
 
-CREATE INDEX IF NOT EXISTS idx_investments_start_date ON investments(start_date);
-CREATE INDEX IF NOT EXISTS idx_investments_type ON investments(type);
-CREATE INDEX IF NOT EXISTS idx_investments_is_active ON investments(is_active);
-CREATE INDEX IF NOT EXISTS idx_investments_maturity_date ON investments(maturity_date);
 
 CREATE INDEX IF NOT EXISTS idx_google_sheets_last_sync ON google_sheets_config(last_sync);
 CREATE INDEX IF NOT EXISTS idx_google_sheets_token_expiry ON google_sheets_config(token_expiry);
@@ -207,7 +185,7 @@ export async function initializeTursoDatabase(client: Client): Promise<void> {
     }
 
     // Inicializar metadatos de sincronización
-    const tables = ['expenses', 'balance', 'savings_goals', 'savings_movements', 'month_plans', 'investments', 'accounts', 'google_sheets_config'];
+    const tables = ['expenses', 'balance', 'savings_goals', 'savings_movements', 'month_plans', 'accounts', 'google_sheets_config'];
     
     for (const table of tables) {
       await client.execute({

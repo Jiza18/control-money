@@ -4,7 +4,6 @@ import {
   ExpenseRepository, 
   BalanceRepository, 
   SavingsRepository, 
-  InvestmentRepository, 
   GoogleSheetsRepository,
   AccountRepository,
   SavingsMovementRepository,
@@ -15,7 +14,6 @@ import {
   Expense, 
   Balance, 
   SavingsGoal, 
-  Investment, 
   GoogleSheetsConfig,
   PaymentRecord,
   Account,
@@ -629,136 +627,6 @@ class TursoSavingsMovementRepository implements SavingsMovementRepository {
   }
 }
 
-class TursoInvestmentRepository implements InvestmentRepository {
-  private client: Client;
-
-  constructor(client: Client) {
-    this.client = client;
-  }
-
-  async create(investment: Omit<Investment, 'id'>): Promise<Investment> {
-    const result = await this.client.execute({
-      sql: `INSERT INTO investments (name, type, initial_amount, current_amount, annual_rate, start_date, term_months, maturity_date, compounding_frequency, is_active, notes) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
-      args: [
-        investment.name,
-        investment.type,
-        investment.initialAmount,
-        investment.currentAmount,
-        investment.annualRate,
-        dateToString(investment.startDate),
-        investment.termMonths,
-        dateToString(investment.maturityDate),
-        investment.compoundingFrequency,
-        booleanToNumber(investment.isActive),
-        investment.notes || null
-      ]
-    });
-
-    return this.mapRowToInvestment(result.rows[0]);
-  }
-
-  async update(investment: Investment): Promise<Investment> {
-    await this.client.execute({
-      sql: `UPDATE investments SET name = ?, type = ?, initial_amount = ?, current_amount = ?, annual_rate = ?, 
-            start_date = ?, term_months = ?, maturity_date = ?, compounding_frequency = ?, is_active = ?, notes = ?, 
-            updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-      args: [
-        investment.name,
-        investment.type,
-        investment.initialAmount,
-        investment.currentAmount,
-        investment.annualRate,
-        dateToString(investment.startDate),
-        investment.termMonths,
-        dateToString(investment.maturityDate),
-        investment.compoundingFrequency,
-        booleanToNumber(investment.isActive),
-        investment.notes || null,
-        investment.id!
-      ]
-    });
-
-    return investment;
-  }
-
-  async delete(id: number): Promise<boolean> {
-    try {
-      await this.client.execute({
-        sql: 'DELETE FROM investments WHERE id = ?',
-        args: [id]
-      });
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  async findById(id: number): Promise<Investment | undefined> {
-    const result = await this.client.execute({
-      sql: 'SELECT * FROM investments WHERE id = ?',
-      args: [id]
-    });
-
-    return result.rows[0] ? this.mapRowToInvestment(result.rows[0]) : undefined;
-  }
-
-  async findAll(): Promise<Investment[]> {
-    const result = await this.client.execute('SELECT * FROM investments ORDER BY start_date DESC');
-    return result.rows.map(row => this.mapRowToInvestment(row));
-  }
-
-  async findByType(type: Investment['type']): Promise<Investment[]> {
-    const result = await this.client.execute({
-      sql: 'SELECT * FROM investments WHERE type = ? ORDER BY start_date DESC',
-      args: [type]
-    });
-
-    return result.rows.map(row => this.mapRowToInvestment(row));
-  }
-
-  async findActive(): Promise<Investment[]> {
-    const result = await this.client.execute({
-      sql: 'SELECT * FROM investments WHERE is_active = 1 ORDER BY start_date DESC',
-      args: []
-    });
-
-    return result.rows.map(row => this.mapRowToInvestment(row));
-  }
-
-  async updateCurrentValue(id: number): Promise<Investment> {
-    // Aquí implementarías la lógica de cálculo del valor actual
-    // Por simplicidad, mantenemos el valor actual
-    const investment = await this.findById(id);
-    return investment!;
-  }
-
-  async updateAllCurrentValues(): Promise<void> {
-    // Implementar lógica para actualizar todos los valores actuales
-    const investments = await this.findActive();
-    for (const investment of investments) {
-      await this.updateCurrentValue(investment.id!);
-    }
-  }
-
-  private mapRowToInvestment(row: any): Investment {
-    return {
-      id: row.id as number,
-      name: row.name as string,
-      type: row.type as Investment['type'],
-      initialAmount: row.initial_amount as number,
-      currentAmount: row.current_amount as number,
-      annualRate: row.annual_rate as number,
-      startDate: stringToDate(row.start_date as string),
-      termMonths: row.term_months as number,
-      maturityDate: stringToDate(row.maturity_date as string),
-      compoundingFrequency: row.compounding_frequency as Investment['compoundingFrequency'],
-      isActive: numberToBoolean(row.is_active as number),
-      notes: row.notes as string || undefined
-    };
-  }
-}
-
 class TursoAccountRepository implements AccountRepository {
   private client: Client;
 
@@ -977,23 +845,6 @@ class TursoDatabaseOperations implements DatabaseOperations {
     const plansResult = await this.client.execute('SELECT * FROM month_plans');
     data.monthPlans = plansResult.rows.map(row => mapRowToMonthPlan(row));
 
-    // Exportar investments
-    const investmentsResult = await this.client.execute('SELECT * FROM investments');
-    data.investments = investmentsResult.rows.map(row => ({
-      id: row.id,
-      name: row.name,
-      type: row.type,
-      initialAmount: row.initial_amount,
-      currentAmount: row.current_amount,
-      annualRate: row.annual_rate,
-      startDate: stringToDate(row.start_date as string),
-      termMonths: row.term_months,
-      maturityDate: stringToDate(row.maturity_date as string),
-      compoundingFrequency: row.compounding_frequency,
-      isActive: numberToBoolean(row.is_active as number),
-      notes: row.notes || undefined
-    }));
-
     // Exportar accounts
     const accountsResult = await this.client.execute('SELECT * FROM accounts');
     data.accounts = accountsResult.rows.map(row => ({
@@ -1112,29 +963,6 @@ class TursoDatabaseOperations implements DatabaseOperations {
       }
     }
 
-    // Importar investments
-    if (data.investments) {
-      for (const investment of data.investments) {
-        await this.client.execute({
-          sql: `INSERT INTO investments (name, type, initial_amount, current_amount, annual_rate, start_date, term_months, maturity_date, compounding_frequency, is_active, notes) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          args: [
-            investment.name,
-            investment.type,
-            investment.initialAmount,
-            investment.currentAmount,
-            investment.annualRate,
-            dateToString(investment.startDate),
-            investment.termMonths,
-            dateToString(investment.maturityDate),
-            investment.compoundingFrequency,
-            booleanToNumber(investment.isActive),
-            investment.notes || null
-          ]
-        });
-      }
-    }
-
     // Importar accounts conservando el id: expenses.account_id apunta a él
     if (data.accounts) {
       for (const account of data.accounts) {
@@ -1193,7 +1021,6 @@ class TursoDatabaseOperations implements DatabaseOperations {
     await this.client.execute('DELETE FROM savings_goals');
     await this.client.execute('DELETE FROM savings_movements');
     await this.client.execute('DELETE FROM month_plans');
-    await this.client.execute('DELETE FROM investments');
     await this.client.execute('DELETE FROM accounts');
     await this.client.execute('DELETE FROM google_sheets_config');
   }
@@ -1223,7 +1050,6 @@ export class TursoRepository implements DatabaseRepository {
   public expenses: ExpenseRepository;
   public balance: BalanceRepository;
   public savings: SavingsRepository;
-  public investments: InvestmentRepository;
   public accounts: AccountRepository;
   public savingsMovements: SavingsMovementRepository;
   public monthPlans: MonthPlanRepository;
@@ -1234,7 +1060,6 @@ export class TursoRepository implements DatabaseRepository {
     this.expenses = new TursoExpenseRepository(client);
     this.balance = new TursoBalanceRepository(client);
     this.savings = new TursoSavingsRepository(client);
-    this.investments = new TursoInvestmentRepository(client);
     this.accounts = new TursoAccountRepository(client);
     this.savingsMovements = new TursoSavingsMovementRepository(client);
     this.monthPlans = new TursoMonthPlanRepository(client);

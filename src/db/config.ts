@@ -75,21 +75,6 @@ export interface SavingsMovement {
   accountId?: number; // Cuenta de la que salió (aportación) o a la que volvió (retirada) el dinero
 }
 
-export interface Investment {
-  id?: number;
-  name: string;
-  type: 'fixed-deposit' | 'savings-account' | 'government-bond' | 'mutual-fund' | 'other';
-  initialAmount: number;
-  currentAmount: number;
-  annualRate: number; // Tasa anual en porcentaje
-  startDate: Date;
-  termMonths: number; // Plazo en meses
-  maturityDate: Date;
-  compoundingFrequency: 'daily' | 'monthly' | 'quarterly' | 'semi-annual' | 'annual';
-  isActive: boolean;
-  notes?: string;
-}
-
 // Plan de un mes futuro: nómina prevista y cuánto se reparte a cada cuenta
 export interface MonthPlan {
   id?: number;
@@ -158,11 +143,6 @@ export type ExpenseDB = {
     value: SavingsGoal;
     indexes: { 'startDate': Date; 'completed': boolean };
   };
-  investments: {
-    key: number;
-    value: Investment;
-    indexes: { 'startDate': Date; 'type': string; 'isActive': boolean; 'maturityDate': Date };
-  };
   dbConfig: {
     key: number;
     value: CloudDbConfig;
@@ -229,17 +209,6 @@ function setupSavingsStore(db: IDBPDatabase<ExpenseDB> | IDBDatabase) {
     const savingsStore = db.createObjectStore('savings', { keyPath: 'id', autoIncrement: true });
     savingsStore.createIndex('startDate', 'startDate');
     savingsStore.createIndex('completed', 'completed');
-  }
-}
-
-// Función para crear o actualizar el store de investments
-function setupInvestmentsStore(db: IDBPDatabase<ExpenseDB> | IDBDatabase) {
-  if (!db.objectStoreNames.contains('investments')) {
-    const investmentsStore = db.createObjectStore('investments', { keyPath: 'id', autoIncrement: true });
-    investmentsStore.createIndex('startDate', 'startDate');
-    investmentsStore.createIndex('type', 'type');
-    investmentsStore.createIndex('isActive', 'isActive');
-    investmentsStore.createIndex('maturityDate', 'maturityDate');
   }
 }
 
@@ -361,7 +330,7 @@ export async function deleteDatabase(): Promise<boolean> {
 }
 
 const REQUIRED_STORES: StoreNames<ExpenseDB>[] = [
-  'expenses', 'balance', 'sheetConfig', 'savings', 'investments', 'dbConfig', 'budgets', 'aiConfig', 'accounts',
+  'expenses', 'balance', 'sheetConfig', 'savings', 'dbConfig', 'budgets', 'aiConfig', 'accounts',
   'savingsMovements', 'monthPlans',
 ];
 
@@ -374,7 +343,6 @@ function setupAllStores(db: IDBPDatabase<ExpenseDB>) {
   setupBalanceStore(db);
   setupSheetConfigStore(db);
   setupSavingsStore(db);
-  setupInvestmentsStore(db);
   setupDbConfigStore(db);
   setupBudgetsStore(db);
   setupAIConfigStore(db);

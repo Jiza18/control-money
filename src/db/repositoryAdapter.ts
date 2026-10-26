@@ -1,7 +1,7 @@
 import { DatabaseRepository } from './repositories/interfaces';
 import type { DatabaseType } from './repositories/interfaces';
 import { createRepositoryFromEnv } from './repositories/repositoryFactory';
-import { Expense, Balance, SavingsGoal, Investment, GoogleSheetsConfig } from './config';
+import { Expense, Balance, SavingsGoal, GoogleSheetsConfig } from './config';
 
 // Singleton para el repositorio actual
 let currentRepository: DatabaseRepository | null = null;
@@ -134,33 +134,6 @@ export async function getSavingsGoalById(id: number): Promise<SavingsGoal | unde
   return repo.savings.findById(id);
 }
 
-// Servicios de inversiones
-export async function addInvestment(investment: Omit<Investment, 'id'>): Promise<Investment> {
-  const repo = await getCurrentRepository();
-  return repo.investments.create(investment);
-}
-
-export async function getInvestments(): Promise<Investment[]> {
-  const repo = await getCurrentRepository();
-  return repo.investments.findAll();
-}
-
-export async function updateInvestment(investment: Investment): Promise<Investment> {
-  const repo = await getCurrentRepository();
-  return repo.investments.update(investment);
-}
-
-export async function deleteInvestment(id: number): Promise<void> {
-  const repo = await getCurrentRepository();
-  await repo.investments.delete(id);
-}
-
-export async function getInvestmentById(id: number): Promise<Investment | undefined> {
-  const repo = await getCurrentRepository();
-  return repo.investments.findById(id);
-}
-
-// Servicios de configuración de Google Sheets
 export async function saveGoogleSheetsConfig(config: Omit<GoogleSheetsConfig, 'id'>): Promise<GoogleSheetsConfig> {
   const repo = await getCurrentRepository();
   return repo.googleSheets.create(config);

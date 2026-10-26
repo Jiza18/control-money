@@ -39,16 +39,6 @@
 - Estado: En progreso / Completado
 - Resumen global de todas las metas
 
-### Inversiones (`/investments`)
-
-- Crear, editar y eliminar inversiones
-- **Tipos:** Depósito a Plazo Fijo · Cuenta de Ahorros · Bono del Estado · Fondo Mutuo · Otro
-- Campos: monto inicial, tasa anual, plazo en meses, frecuencia de capitalización, fecha de inicio, notas
-- **Frecuencias de capitalización:** Diaria · Mensual · Trimestral · Semestral · Anual
-- Cálculo automático de: valor actual, valor al vencimiento, días restantes, ganancia esperada (monto y %)
-- Resumen ejecutivo: total invertido, valor actual total, ganancias totales, rendimiento global
-- Estado: Activa / Inactiva
-
 ### Balance e ingresos (sidebar)
 
 - Gestión del balance global y los ingresos mensuales desde el sidebar
@@ -103,7 +93,6 @@
 | `Expense` | amount, category, description, date, frequency, isPaid, paymentHistory |
 | `Balance` | amount, monthlyIncome, projectedAmount, realAmount |
 | `SavingsGoal` | targetAmount, currentAmount, monthlyContribution, targetDate, completed |
-| `Investment` | initialAmount, annualRate, termMonths, compoundingFrequency, maturityDate, isActive |
 | `CloudDbConfig` | provider (turso), url, authToken |
 | `GoogleSheetsConfig` | clientId, clientSecret, accessToken, spreadsheetId, sheetName |
 
@@ -126,7 +115,6 @@ La capa de datos usa **Repository Pattern** con una factory que selecciona la im
 | `/` → `/expenses` | Redirección |
 | `/expenses` | Gestión de gastos |
 | `/savings` | Metas de ahorro |
-| `/investments` | Inversiones |
 | `/configuration` | BD, Backup, Google Sheets |
 | `/oauth-callback` | Callback OAuth2 de Google |
 

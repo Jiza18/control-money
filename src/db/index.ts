@@ -34,12 +34,6 @@ export {
   deleteSavingsGoal,
   getSavingsGoalById,
   
-  // Servicios de inversiones
-  addInvestment,
-  getInvestments,
-  updateInvestment,
-  deleteInvestment,
-  getInvestmentById,
   
   // Servicios de configuración de Google Sheets
   saveGoogleSheetsConfig,

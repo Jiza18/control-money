@@ -19,9 +19,6 @@ export async function exportDatabase() {
     data.savings = await db.getAll('savings');
   }
 
-  if (db.objectStoreNames.contains('investments')) {
-    data.investments = await db.getAll('investments');
-  }
 
   if (db.objectStoreNames.contains('sheetConfig')) {
     data.sheetConfig = await db.getAll('sheetConfig');
@@ -111,24 +108,6 @@ export async function importDatabase(data: Record<string, any[]>) {
     await tx.done;
   }
 
-  if (data.investments && db.objectStoreNames.contains('investments')) {
-    const tx = db.transaction('investments', 'readwrite');
-    const store = tx.objectStore('investments');
-    
-    await store.clear();
-    
-    for (const inv of data.investments) {
-      const normalized = {
-        ...inv,
-        startDate: inv?.startDate instanceof Date ? inv.startDate : new Date(inv?.startDate),
-        maturityDate: inv?.maturityDate instanceof Date ? inv.maturityDate : new Date(inv?.maturityDate),
-        isActive: Boolean(inv?.isActive)
-      };
-      await store.add(normalized);
-    }
-    
-    await tx.done;
-  }
   
   if (data.sheetConfig && db.objectStoreNames.contains('sheetConfig')) {
     const tx = db.transaction('sheetConfig', 'readwrite');

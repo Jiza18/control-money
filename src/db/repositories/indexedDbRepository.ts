@@ -3,7 +3,6 @@ import {
   ExpenseRepository, 
   BalanceRepository, 
   SavingsRepository, 
-  InvestmentRepository, 
   GoogleSheetsRepository,
   AccountRepository,
   SavingsMovementRepository,
@@ -14,7 +13,6 @@ import {
   Expense, 
   Balance, 
   SavingsGoal, 
-  Investment, 
   GoogleSheetsConfig, 
   Account,
   SavingsMovement,
@@ -44,17 +42,6 @@ import {
   getSavingsGoalsByStatus,
   updateSavingsAmount
 } from '../savingsServices';
-import {
-  addInvestment,
-  updateInvestment,
-  deleteInvestment,
-  getAllInvestments,
-  getInvestmentById,
-  getActiveInvestments,
-  getInvestmentsByType,
-  updateInvestmentCurrentValue,
-  updateAllInvestmentValues
-} from '../investmentServices';
 
 class IndexedDbExpenseRepository implements ExpenseRepository {
   async create(expense: Omit<Expense, 'id'>): Promise<Expense> {
@@ -195,53 +182,6 @@ class IndexedDbSavingsRepository implements SavingsRepository {
     await updateSavingsAmount(id, amount);
     const updated = await this.findById(id);
     return updated!;
-  }
-}
-
-class IndexedDbInvestmentRepository implements InvestmentRepository {
-  async create(investment: Omit<Investment, 'id'>): Promise<Investment> {
-    const id = await addInvestment(investment);
-    return { ...investment, id } as Investment;
-  }
-
-  async update(investment: Investment): Promise<Investment> {
-    await updateInvestment(investment);
-    return investment;
-  }
-
-  async delete(id: number): Promise<boolean> {
-    try {
-      await deleteInvestment(id);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  async findById(id: number): Promise<Investment | undefined> {
-    return await getInvestmentById(id);
-  }
-
-  async findAll(): Promise<Investment[]> {
-    return await getAllInvestments();
-  }
-
-  async findByType(type: Investment['type']): Promise<Investment[]> {
-    return await getInvestmentsByType(type);
-  }
-
-  async findActive(): Promise<Investment[]> {
-    return await getActiveInvestments();
-  }
-
-  async updateCurrentValue(id: number): Promise<Investment> {
-    await updateInvestmentCurrentValue(id);
-    const updated = await this.findById(id);
-    return updated!;
-  }
-
-  async updateAllCurrentValues(): Promise<void> {
-    await updateAllInvestmentValues();
   }
 }
 
@@ -436,7 +376,6 @@ class IndexedDbDatabaseOperations implements DatabaseOperations {
     await clearStore('expenses');
     await clearStore('balance');
     await clearStore('savings');
-    await clearStore('investments');
     await clearStore('accounts');
     await clearStore('savingsMovements');
     await clearStore('monthPlans');
@@ -468,7 +407,6 @@ export class IndexedDbRepository implements DatabaseRepository {
   public expenses: ExpenseRepository;
   public balance: BalanceRepository;
   public savings: SavingsRepository;
-  public investments: InvestmentRepository;
   public accounts: AccountRepository;
   public savingsMovements: SavingsMovementRepository;
   public monthPlans: MonthPlanRepository;
@@ -479,7 +417,6 @@ export class IndexedDbRepository implements DatabaseRepository {
     this.expenses = new IndexedDbExpenseRepository();
     this.balance = new IndexedDbBalanceRepository();
     this.savings = new IndexedDbSavingsRepository();
-    this.investments = new IndexedDbInvestmentRepository();
     this.accounts = new IndexedDbAccountRepository();
     this.savingsMovements = new IndexedDbSavingsMovementRepository();
     this.monthPlans = new IndexedDbMonthPlanRepository();
